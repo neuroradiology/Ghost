@@ -16,15 +16,8 @@ Basetoken = ghostBookshelf.Model.extend({
     },
 
     // override for base function since we don't have
-    // a created_by field for sessions
-    creating: function creating(newObj, attr, options) {
-        /*jshint unused:false*/
-    },
-
-    // override for base function since we don't have
     // a updated_by field for sessions
-    saving: function saving(newObj, attr, options) {
-        /*jshint unused:false*/
+    onSaving: function onSaving() {
         // Remove any properties which don't belong on the model
         this.attributes = this.pick(this.permittedAttributes());
     }
@@ -36,9 +29,10 @@ Basetoken = ghostBookshelf.Model.extend({
             .query('where', 'expires', '<', Date.now())
             .fetch(options)
             .then(function then(collection) {
-                collection.invokeThen('destroy', options);
+                return collection.invokeThen('destroy', options);
             });
     },
+
     /**
      * ### destroyByUser
      * @param  {[type]} options has context and id. Context is the user doing the destroy, id is the user to destroy
@@ -53,11 +47,11 @@ Basetoken = ghostBookshelf.Model.extend({
                 .query('where', 'user_id', '=', userId)
                 .fetch(options)
                 .then(function then(collection) {
-                    collection.invokeThen('destroy', options);
+                    return collection.invokeThen('destroy', options);
                 });
         }
 
-        return Promise.reject(new errors.NotFoundError(i18n.t('errors.models.base.token.noUserFound')));
+        return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.models.base.token.noUserFound')}));
     },
 
     /**

@@ -6,7 +6,7 @@ var supportedLocales    = ['en'],
     chalk               = require('chalk'),
     MessageFormat       = require('intl-messageformat'),
 
-    // TODO: fetch this dynamically based on overall blog settings (`key = "defaultLang"` in the `settings` table
+    // TODO: fetch this dynamically based on overall blog settings (`key = "default_locale"`) in the `settings` table
     currentLocale       = 'en',
     blos,
     I18n;
@@ -84,7 +84,15 @@ I18n = {
     init: function init() {
         // read file for current locale and keep its content in memory
         blos = fs.readFileSync(__dirname + '/translations/' + currentLocale + '.json');
-        blos = JSON.parse(blos);
+
+        // if translation file is not valid, you will see an error
+        try {
+            blos = JSON.parse(blos);
+        } catch (err) {
+            blos = undefined;
+            throw err;
+        }
+
         if (global.Intl) {
             // Determine if the built-in `Intl` has the locale data we need.
             var hasBuiltInLocaleData,

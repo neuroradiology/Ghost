@@ -3,16 +3,16 @@
 //
 // Checks if a post has a particular property
 
-var _               = require('lodash'),
-    errors          = require('../errors'),
-    i18n            = require('../i18n'),
-    has;
+var proxy = require('./proxy'),
+    _ = require('lodash'),
+    logging = proxy.logging,
+    i18n = proxy.i18n;
 
-has = function (options) {
+module.exports = function has(options) {
     options = options || {};
     options.hash = options.hash || {};
 
-    var tags = _.pluck(this.tags, 'name'),
+    var tags = _.map(this.tags, 'name'),
         author = this.author ? this.author.name : null,
         tagList = options.hash.tag || false,
         authorList = options.hash.author || false,
@@ -33,15 +33,15 @@ has = function (options) {
     }
 
     function evaluateAuthorList(expr, author) {
-        var authorList =  expr.split(',').map(function (v) {
+        var authorList = expr.split(',').map(function (v) {
             return v.trim().toLocaleLowerCase();
         });
 
-        return _.contains(authorList, author.toLocaleLowerCase());
+        return _.includes(authorList, author.toLocaleLowerCase());
     }
 
     if (!tagList && !authorList) {
-        errors.logWarn(i18n.t('warnings.helpers.has.invalidAttribute'));
+        logging.warn(i18n.t('warnings.helpers.has.invalidAttribute'));
         return;
     }
 
@@ -53,5 +53,3 @@ has = function (options) {
     }
     return options.inverse(this);
 };
-
-module.exports = has;

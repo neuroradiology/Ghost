@@ -1,12 +1,19 @@
 var _ = require('lodash'),
+    Promise = require('bluebird'),
     Models = require('../models'),
     errors = require('../errors'),
+    i18n   = require('../i18n'),
     effective;
 
 effective = {
     user: function (id) {
         return Models.User.findOne({id: id, status: 'all'}, {include: ['permissions', 'roles', 'roles.permissions']})
             .then(function (foundUser) {
+                // CASE: {context: {user: id}} where the id is not in our database
+                if (!foundUser) {
+                    return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.models.user.userNotFound')}));
+                }
+
                 var seenPerms = {},
                     rolePerms = _.map(foundUser.related('roles').models, function (role) {
                         return role.related('permissions').models;
@@ -31,7 +38,7 @@ effective = {
                 });
 
                 return {permissions: allPerms, roles: user.roles};
-            }, errors.logAndThrowError);
+            });
     },
 
     app: function (appName) {
@@ -42,7 +49,7 @@ effective = {
                 }
 
                 return {permissions: foundApp.related('permissions').models};
-            }, errors.logAndThrowError);
+            });
     }
 };
 

@@ -43,6 +43,7 @@ utils = {
          */
         return function doValidate() {
             var object, options, permittedOptions;
+
             if (arguments.length === 2) {
                 object = arguments[0];
                 options = _.clone(arguments[1]) || {};
@@ -90,7 +91,7 @@ utils = {
                 }
 
                 // For now, we can only handle showing the first validation error
-                return errors.logAndRejectError(validationErrors[0]);
+                return Promise.reject(validationErrors[0]);
             }
 
             // If we got an object, check that too
@@ -109,17 +110,19 @@ utils = {
 
     validateOptions: function validateOptions(options) {
         var globalValidations = {
-                id: {matches: /^\d+|me$/},
+                id: {matches: /^[a-f\d]{24}$|^1$|me/i},
                 uuid: {isUUID: true},
                 slug: {isSlug: true},
                 page: {matches: /^\d+$/},
                 limit: {matches: /^\d+|all$/},
+                from: {isDate: true},
+                to: {isDate: true},
                 fields: {matches: /^[\w, ]+$/},
                 order: {matches: /^[a-z0-9_,\. ]+$/i},
                 name: {}
             },
             // these values are sanitised/validated separately
-            noValidation = ['data', 'context', 'include', 'filter'],
+            noValidation = ['data', 'context', 'include', 'filter', 'forUpdate', 'transacting', 'formats'],
             errors = [];
 
         _.each(options, function (value, key) {
@@ -184,8 +187,6 @@ utils = {
 
             return permsPromise.then(function permissionGranted() {
                 return options;
-            }).catch(function handleError(error) {
-                return errors.formatAndRejectAPIError(error);
             });
         };
     },
@@ -210,13 +211,15 @@ utils = {
 
             return permsPromise.then(function permissionGranted() {
                 return options;
-            }).catch(errors.NoPermissionError, function handleNoPermissionError(error) {
-                // pimp error message
-                error.message = i18n.t('errors.api.utils.noPermissionToCall', {method: method, docName: docName});
-                // forward error to next catch()
-                return Promise.reject(error);
-            }).catch(function handleError(error) {
-                return errors.formatAndRejectAPIError(error);
+            }).catch(function handleNoPermissionError(err) {
+                if (err instanceof errors.NoPermissionError) {
+                    err.message = i18n.t('errors.api.utils.noPermissionToCall', {method: method, docName: docName});
+                    return Promise.reject(err);
+                }
+
+                return Promise.reject(new errors.GhostError({
+                    err: err
+                }));
             });
         };
     },
@@ -240,12 +243,16 @@ utils = {
         return this.trimAndLowerCase(fields);
     },
 
+    prepareFormats: function prepareFormats(formats, allowedFormats) {
+        return _.intersection(this.trimAndLowerCase(formats), allowedFormats);
+    },
+
     /**
      * ## Convert Options
      * @param {Array} allowedIncludes
      * @returns {Function} doConversion
      */
-    convertOptions: function convertOptions(allowedIncludes) {
+    convertOptions: function convertOptions(allowedIncludes, allowedFormats) {
         /**
          * Convert our options from API-style to Model-style
          * @param {Object} options
@@ -255,10 +262,20 @@ utils = {
             if (options.include) {
                 options.include = utils.prepareInclude(options.include, allowedIncludes);
             }
+
             if (options.fields) {
                 options.columns = utils.prepareFields(options.fields);
                 delete options.fields;
             }
+
+            if (options.formats) {
+                options.formats = utils.prepareFormats(options.formats, allowedFormats);
+            }
+
+            if (options.formats && options.columns) {
+                options.columns = options.columns.concat(options.formats);
+            }
+
             return options;
         };
     },
@@ -270,9 +287,11 @@ utils = {
      * @param {String} docName
      * @returns {Promise(Object)} resolves to the original object if it checks out
      */
-    checkObject: function (object, docName, editId) {
+    checkObject: function checkObject(object, docName, editId) {
         if (_.isEmpty(object) || _.isEmpty(object[docName]) || _.isEmpty(object[docName][0])) {
-            return errors.logAndRejectError(new errors.BadRequestError(i18n.t('errors.api.utils.noRootKeyProvided', {docName: docName})));
+            return Promise.reject(new errors.BadRequestError({
+                message: i18n.t('errors.api.utils.noRootKeyProvided', {docName: docName})
+            }));
         }
 
         // convert author property to author_id to match the name in the database
@@ -283,20 +302,31 @@ utils = {
             }
         }
 
-        if (editId && object[docName][0].id && parseInt(editId, 10) !== parseInt(object[docName][0].id, 10)) {
-            return errors.logAndRejectError(new errors.BadRequestError(i18n.t('errors.api.utils.invalidIdProvided')));
+        // will remove unwanted null values
+        _.each(object[docName], function (value, index) {
+            if (!_.isObject(object[docName][index])) {
+                return;
+            }
+
+            object[docName][index] = _.omitBy(object[docName][index], _.isNull);
+        });
+
+        if (editId && object[docName][0].id && editId !== object[docName][0].id) {
+            return Promise.reject(new errors.BadRequestError({
+                message: i18n.t('errors.api.utils.invalidIdProvided')
+            }));
         }
 
         return Promise.resolve(object);
     },
-    checkFileExists: function (options, filename) {
-        return !!(options[filename] && options[filename].type && options[filename].path);
+    checkFileExists: function checkFileExists(fileData) {
+        return !!(fileData.mimetype && fileData.path);
     },
-    checkFileIsValid: function (file, types, extensions) {
-        var type = file.type,
-            ext = path.extname(file.name).toLowerCase();
+    checkFileIsValid: function checkFileIsValid(fileData, types, extensions) {
+        var type = fileData.mimetype,
+            ext = path.extname(fileData.name).toLowerCase();
 
-        if (_.contains(types, type) && _.contains(extensions, ext)) {
+        if (_.includes(types, type) && _.includes(extensions, ext)) {
             return true;
         }
         return false;

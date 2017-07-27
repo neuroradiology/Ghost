@@ -1,17 +1,32 @@
-/*globals describe, it*/
-var getCanonicalUrl = require('../../../server/data/meta/canonical_url');
+var should = require('should'), // jshint ignore:line
+    getCanonicalUrl = require('../../../server/data/meta/canonical_url'),
+    markdownToMobiledoc = require('../../utils/fixtures/data-generator').markdownToMobiledoc;
 
 describe('getCanonicalUrl', function () {
     it('should return absolute canonical url for post', function () {
         var canonicalUrl = getCanonicalUrl({
             url: '/this-is-a-test-post/',
             html: '<h1>Test 123</h1>',
-            markdown: '# Test 123',
+            mobiledoc: markdownToMobiledoc('# Test 123'),
             title: 'This is a test post',
             slug: 'this-is-a-test-post',
             secure: true
         });
         canonicalUrl.should.not.equal('/this-is-a-test-post/');
+        canonicalUrl.should.match(/\/this-is-a-test-post\/$/);
+        canonicalUrl.should.not.match(/^https:/);
+    });
+
+    it('should return absolute canonical url for amp post without /amp/ in url', function () {
+        var canonicalUrl = getCanonicalUrl({
+            url: '/this-is-a-test-post/amp/',
+            html: '<h1>Test 123</h1>',
+            mobiledoc: markdownToMobiledoc('# Test 123'),
+            title: 'This is a test post',
+            slug: 'this-is-a-test-post',
+            secure: true
+        });
+        canonicalUrl.should.not.equal('/this-is-a-test-post/amp/');
         canonicalUrl.should.match(/\/this-is-a-test-post\/$/);
         canonicalUrl.should.not.match(/^https:/);
     });

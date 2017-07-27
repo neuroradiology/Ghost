@@ -1,7 +1,8 @@
-/*globals describe, it, before, after */
-var should          = require('should'),
+var should = require('should'),
+    sinon = require('sinon'),
     getContextObject = require('../../../server/data/meta/context_object.js'),
-    configUtils     = require('../../utils/configUtils');
+    settingsCache = require('../../../server/settings/cache'),
+    sandbox = sinon.sandbox.create();
 
 describe('getContextObject', function () {
     var data, context, contextObject;
@@ -12,7 +13,7 @@ describe('getContextObject', function () {
 
     it('should return post context object for a post', function () {
         data = {post: {id: 2}};
-        context = 'post';
+        context = ['post'];
         contextObject = getContextObject(data, context);
 
         should.exist(contextObject);
@@ -21,7 +22,25 @@ describe('getContextObject', function () {
 
     it('should return post context object for a static page', function () {
         data = {post: {id: 2}};
-        context = 'page';
+        context = ['page'];
+        contextObject = getContextObject(data, context);
+
+        should.exist(contextObject);
+        contextObject.should.eql(data.post);
+    });
+
+    it('should return post context object for an AMP post', function () {
+        data = {post: {id: 2}};
+        context = ['amp', 'post'];
+        contextObject = getContextObject(data, context);
+
+        should.exist(contextObject);
+        contextObject.should.eql(data.post);
+    });
+
+    it('should return post context object for a static page with amp context', function () {
+        data = {post: {id: 2}};
+        context = ['amp', 'page'];
         contextObject = getContextObject(data, context);
 
         should.exist(contextObject);
@@ -30,20 +49,24 @@ describe('getContextObject', function () {
 
     describe('override blog', function () {
         before(function () {
-            configUtils.set({theme: {foo: 'bar'}});
+            sandbox.stub(settingsCache, 'get', function (key) {
+                return {
+                    cover_image: 'test.png'
+                }[key];
+            });
         });
 
         after(function () {
-            configUtils.restore();
+            sandbox.restore();
         });
 
         it('should return blog context object for unknown context', function () {
             data = {post: {id: 2}};
-            context = 'unknown';
+            context = ['unknown'];
             contextObject = getContextObject(data, context);
 
             should.exist(contextObject);
-            contextObject.should.have.property('foo', 'bar');
+            contextObject.should.have.property('cover_image', 'test.png');
         });
     });
 });

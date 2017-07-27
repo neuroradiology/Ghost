@@ -1,9 +1,8 @@
-/*globals describe, beforeEach, it*/
-var should   = require('should'),
-    _        = require('lodash'),
+var should = require('should'),
+    _ = require('lodash'),
 
     // Stuff we are testing
-    channelConfig      = require('../../../../server/controllers/frontend/channel-config'),
+    channelConfig = require('../../../../server/controllers/frontend/channel-config'),
     setResponseContext = require('../../../../server/controllers/frontend/context');
 
 describe('Contexts', function () {
@@ -11,7 +10,8 @@ describe('Contexts', function () {
 
     beforeEach(function () {
         req = {
-            params: {}
+            params: {},
+            body: {}
         };
         res = {
             locals: {}
@@ -351,6 +351,21 @@ describe('Contexts', function () {
         });
     });
 
+    describe('Subscribe', function () {
+        it('should correctly identify /subscribe/ as the subscribe route', function () {
+            // Setup test
+            setupContext('/subscribe/');
+
+            // Execute test
+            setResponseContext(req, res, data);
+
+            // Check context
+            should.exist(res.locals.context);
+            res.locals.context.should.be.an.Array().with.lengthOf(1);
+            res.locals.context[0].should.eql('subscribe');
+        });
+    });
+
     describe('RSS', function () {
         // NOTE: this works, but is never used in reality, as setResponseContext isn't called
         // for RSS feeds at the moment.
@@ -391,6 +406,39 @@ describe('Contexts', function () {
             res.locals.context.should.be.an.Array().with.lengthOf(2);
             res.locals.context[0].should.eql('paged');
             res.locals.context[1].should.eql('rss');
+        });
+    });
+    describe('AMP', function () {
+        it('should correctly identify an AMP post', function () {
+            // Setup test
+            setupContext('/welcome-to-ghost/amp/');
+            data.post = {
+                page: false
+            };
+
+            // Execute test
+            setResponseContext(req, res, data);
+            // Check context
+            should.exist(res.locals.context);
+            res.locals.context.should.be.an.Array().with.lengthOf(2);
+            res.locals.context[0].should.eql('amp');
+            res.locals.context[1].should.eql('post');
+        });
+
+        it('should correctly identify an AMP page', function () {
+            // Setup test
+            setupContext('/welcome-to-ghost/amp/');
+            data.post = {
+                page: true
+            };
+
+            // Execute test
+            setResponseContext(req, res, data);
+            // Check context
+            should.exist(res.locals.context);
+            res.locals.context.should.be.an.Array().with.lengthOf(2);
+            res.locals.context[0].should.eql('amp');
+            res.locals.context[1].should.eql('page');
         });
     });
 });

@@ -5,15 +5,21 @@
 // App: Admin|Blog|API
 //
 // Detect upper case in req.path.
+//
+//  Example req:
+//  req.originalUrl = /blog/ghost/signin/?asdAD=asdAS
+//  req.url = /ghost/signin/?asdAD=asdAS
+//  req.baseUrl = /blog
+//  req.path =  /ghost/signin/
 
 var utils = require('../utils'),
     uncapitalise;
 
 uncapitalise = function uncapitalise(req, res, next) {
-    /*jslint unparam:true*/
-    var pathToTest = req.path,
-        isSignupOrReset = req.path.match(/(\/ghost\/(signup|reset)\/)/i),
-        isAPI = req.path.match(/(\/ghost\/api\/v[\d\.]+\/.*?\/)/i);
+    var pathToTest = (req.baseUrl ? req.baseUrl : '') + req.path,
+        isSignupOrReset = pathToTest.match(/^(.*\/ghost\/(signup|reset)\/)/i),
+        isAPI = pathToTest.match(/^(.*\/ghost\/api\/v[\d\.]+\/.*?\/)/i),
+        redirectPath;
 
     if (isSignupOrReset) {
         pathToTest = isSignupOrReset[1];
@@ -29,9 +35,12 @@ uncapitalise = function uncapitalise(req, res, next) {
      * That encoding isn't useful here, as it triggers an extra uncapitalise redirect, so we decode the path first
      */
     if (/[A-Z]/.test(decodeURIComponent(pathToTest))) {
+        redirectPath = (
+          utils.removeOpenRedirectFromUrl((req.originalUrl || req.url).replace(pathToTest, pathToTest.toLowerCase()))
+        );
+
         res.set('Cache-Control', 'public, max-age=' + utils.ONE_YEAR_S);
-        // Adding baseUrl ensures subdirectories are kept
-        res.redirect(301, (req.baseUrl ? req.baseUrl : '') + req.url.replace(pathToTest, pathToTest.toLowerCase()));
+        res.redirect(301, redirectPath);
     } else {
         next();
     }

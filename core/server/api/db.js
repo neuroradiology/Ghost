@@ -1,21 +1,15 @@
 // # DB API
 // API for DB operations
-var _                = require('lodash'),
-    Promise          = require('bluebird'),
+var Promise          = require('bluebird'),
     exporter         = require('../data/export'),
     importer         = require('../data/importer'),
-    backupDatabase   = require('../data/migration').backupDatabase,
+    backupDatabase   = require('../data/db/backup'),
     models           = require('../models'),
     errors           = require('../errors'),
     utils            = require('./utils'),
     pipeline         = require('../utils/pipeline'),
-    i18n             = require('../i18n'),
-
-    api              = {},
-    docName      = 'db',
+    docName          = 'db',
     db;
-
-api.settings         = require('./settings');
 
 /**
  * ## DB API Methods
@@ -31,8 +25,8 @@ db = {
      * @param {{context}} options
      * @returns {Promise} Ghost Export JSON format
      */
-    exportContent: function (options) {
-        var tasks = [];
+    exportContent: function exportContent(options) {
+        var tasks;
 
         options = options || {};
 
@@ -40,8 +34,8 @@ db = {
         function exportContent() {
             return exporter.doExport().then(function (exportedData) {
                 return {db: [exportedData]};
-            }).catch(function (error) {
-                return Promise.reject(new errors.InternalServerError(error.message || error));
+            }).catch(function (err) {
+                return Promise.reject(new errors.GhostError({err: err}));
             });
         }
 
@@ -60,40 +54,19 @@ db = {
      * @param {{context}} options
      * @returns {Promise} Success
      */
-    importContent: function (options) {
-        var tasks = [];
-
+    importContent: function importContent(options) {
+        var tasks;
         options = options || {};
 
-        function validate(options) {
-            // Check if a file was provided
-            if (!utils.checkFileExists(options, 'importfile')) {
-                return Promise.reject(new errors.ValidationError(i18n.t('errors.api.db.selectFileToImport')));
-            }
-
-            // Check if the file is valid
-            if (!utils.checkFileIsValid(options.importfile, importer.getTypes(), importer.getExtensions())) {
-                return Promise.reject(new errors.UnsupportedMediaTypeError(
-                    i18n.t('errors.api.db.unsupportedFile') +
-                        _.reduce(importer.getExtensions(), function (memo, ext) {
-                            return memo ? memo + ', ' + ext : ext;
-                        })
-                ));
-            }
-
-            return options;
-        }
-
         function importContent(options) {
-            return importer.importFromFile(options.importfile)
-                .then(function () {
-                    api.settings.updateSettingsCache();
-                })
-                .return({db: []});
+            return importer.importFromFile(options)
+                .then(function (response) {
+                    // NOTE: response can contain 2 objects if images are imported
+                    return {db: [], problems: response.length === 2 ? response[1].problems : response[0].problems};
+                });
         }
 
         tasks = [
-            validate,
             utils.handlePermissions(docName, 'importContent'),
             importContent
         ];
@@ -108,9 +81,9 @@ db = {
      * @param {{context}} options
      * @returns {Promise} Success
      */
-    deleteAllContent: function (options) {
+    deleteAllContent: function deleteAllContent(options) {
         var tasks,
-            queryOpts = {columns: 'id'};
+            queryOpts = {columns: 'id', context: {internal: true}};
 
         options = options || {};
 
@@ -121,10 +94,10 @@ db = {
             ];
 
             return Promise.each(collections, function then(Collection) {
-                return Collection.invokeThen('destroy');
+                return Collection.invokeThen('destroy', queryOpts);
             }).return({db: []})
-            .catch(function (error) {
-                throw new errors.InternalServerError(error.message || error);
+            .catch(function (err) {
+                throw new errors.GhostError({err: err});
             });
         }
 

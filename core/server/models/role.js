@@ -30,7 +30,8 @@ Role = ghostBookshelf.Model.extend({
             // whitelists for the `options` hash argument on methods, by method name.
             // these are the only options that can be passed to Bookshelf / Knex.
             validOptions = {
-                findOne: ['withRelated']
+                findOne: ['withRelated'],
+                findAll: ['withRelated']
             };
 
         if (validOptions[methodName]) {
@@ -50,33 +51,34 @@ Role = ghostBookshelf.Model.extend({
         if (_.isNumber(roleModelOrId) || _.isString(roleModelOrId)) {
             // Grab the original args without the first one
             origArgs = _.toArray(arguments).slice(1);
+
             // Get the actual role model
             return this.findOne({id: roleModelOrId, status: 'all'}).then(function then(foundRoleModel) {
                 // Build up the original args but substitute with actual model
                 var newArgs = [foundRoleModel].concat(origArgs);
 
                 return self.permissible.apply(self, newArgs);
-            }, errors.logAndThrowError);
+            });
         }
 
         if (action === 'assign' && loadedPermissions.user) {
-            if (_.any(loadedPermissions.user.roles, {name: 'Owner'})) {
+            if (_.some(loadedPermissions.user.roles, {name: 'Owner'})) {
                 checkAgainst = ['Owner', 'Administrator', 'Editor', 'Author'];
-            } else if (_.any(loadedPermissions.user.roles, {name: 'Administrator'})) {
+            } else if (_.some(loadedPermissions.user.roles, {name: 'Administrator'})) {
                 checkAgainst = ['Administrator', 'Editor', 'Author'];
-            } else if (_.any(loadedPermissions.user.roles, {name: 'Editor'})) {
+            } else if (_.some(loadedPermissions.user.roles, {name: 'Editor'})) {
                 checkAgainst = ['Author'];
             }
 
             // Role in the list of permissible roles
-            hasUserPermission = roleModelOrId && _.contains(checkAgainst, roleModelOrId.get('name'));
+            hasUserPermission = roleModelOrId && _.includes(checkAgainst, roleModelOrId.get('name'));
         }
 
         if (hasUserPermission && hasAppPermission) {
             return Promise.resolve();
         }
 
-        return Promise.reject(new errors.NoPermissionError(i18n.t('errors.models.role.notEnoughPermission')));
+        return Promise.reject(new errors.NoPermissionError({message: i18n.t('errors.models.role.notEnoughPermission')}));
     }
 });
 

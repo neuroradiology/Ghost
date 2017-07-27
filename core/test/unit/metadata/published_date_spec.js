@@ -1,6 +1,5 @@
-/*globals describe, it*/
-var getPublishedDate = require('../../../server/data/meta/published_date'),
-    should = require('should');
+var should = require('should'),
+    getPublishedDate = require('../../../server/data/meta/published_date');
 
 describe('getPublishedDate', function () {
     it('should return published at date as ISO 8601 from context if exists', function () {
@@ -19,6 +18,16 @@ describe('getPublishedDate', function () {
             post: {
                 published_at: new Date('2016-01-01 12:56:45.232Z'),
                 created_at: new Date('2015-01-01 12:56:45.232Z')
+            }
+        });
+        should.equal(pubDate, '2016-01-01T12:56:45.232Z');
+    });
+
+    it('should return published at date for an amp context', function () {
+        var pubDate = getPublishedDate({
+            context: ['amp', 'post'],
+            post: {
+                published_at: new Date('2016-01-01 12:56:45.232Z')
             }
         });
         should.equal(pubDate, '2016-01-01T12:56:45.232Z');

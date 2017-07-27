@@ -37,7 +37,7 @@ posts = {
      * @returns {Promise<Posts>} Posts Collection with Meta
      */
     browse: function browse(options) {
-        var extraOptions = ['status'],
+        var extraOptions = ['status', 'formats'],
             permittedOptions,
             tasks;
 
@@ -62,7 +62,7 @@ posts = {
         tasks = [
             utils.validate(docName, {opts: permittedOptions}),
             utils.handlePublicPermissions(docName, 'browse'),
-            utils.convertOptions(allowedIncludes),
+            utils.convertOptions(allowedIncludes, dataProvider.Post.allowedFormats),
             modelQuery
         ];
 
@@ -79,7 +79,7 @@ posts = {
      * @return {Promise<Post>} Post
      */
     read: function read(options) {
-        var attrs = ['id', 'slug', 'status', 'uuid'],
+        var attrs = ['id', 'slug', 'status', 'uuid', 'formats'],
             tasks;
 
         /**
@@ -94,9 +94,9 @@ posts = {
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName, {attrs: attrs}),
+            utils.validate(docName, {attrs: attrs, opts: options.opts || []}),
             utils.handlePublicPermissions(docName, 'read'),
-            utils.convertOptions(allowedIncludes),
+            utils.convertOptions(allowedIncludes, dataProvider.Post.allowedFormats),
             modelQuery
         ];
 
@@ -107,7 +107,7 @@ posts = {
                 return {posts: [result.toJSON(options)]};
             }
 
-            return Promise.reject(new errors.NotFoundError(i18n.t('errors.api.posts.postNotFound')));
+            return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.api.posts.postNotFound')}));
         });
     },
 
@@ -135,7 +135,7 @@ posts = {
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName, {opts: utils.idDefaultOptions}),
+            utils.validate(docName, {opts: utils.idDefaultOptions.concat(options.opts || [])}),
             utils.handlePermissions(docName, 'edit'),
             utils.convertOptions(allowedIncludes),
             modelQuery
@@ -154,7 +154,7 @@ posts = {
                 return {posts: [post]};
             }
 
-            return Promise.reject(new errors.NotFoundError(i18n.t('errors.api.posts.postNotFound')));
+            return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.api.posts.postNotFound')}));
         });
     },
 
@@ -220,10 +220,10 @@ posts = {
                 data = _.defaults({status: 'all'}, options),
                 fetchOpts = _.defaults({require: true, columns: 'id'}, options);
 
-            return Post.findOne(data, fetchOpts).then(function (post) {
-                return post.destroy(options).return(null);
+            return Post.findOne(data, fetchOpts).then(function () {
+                return Post.destroy(options).return(null);
             }).catch(Post.NotFoundError, function () {
-                throw new errors.NotFoundError(i18n.t('errors.api.posts.postNotFound'));
+                throw new errors.NotFoundError({message: i18n.t('errors.api.posts.postNotFound')});
             });
         }
 

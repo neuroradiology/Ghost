@@ -1,18 +1,16 @@
-/*globals describe, before, beforeEach, afterEach, it*/
-var should          = require('should'),
-    sinon           = require('sinon'),
-    rewire          = require('rewire'),
-    _               = require('lodash'),
-    Promise         = require('bluebird'),
-    testUtils       = require('../utils'),
+var should = require('should'),
+    sinon = require('sinon'),
+    rewire = require('rewire'),
+    _ = require('lodash'),
+    Promise = require('bluebird'),
+    testUtils = require('../utils'),
+    channelConfig = require('../../server/controllers/frontend/channel-config'),
+    api = require('../../server/api'),
+    settingsCache = require('../../server/settings/cache'),
+    rss = rewire('../../server/data/xml/rss'),
+    configUtils = require('../utils/configUtils'),
 
-    channelConfig   = require('../../server/controllers/frontend/channel-config'),
-
-    // Things that get overridden
-    api             = require('../../server/api'),
-    rss             = rewire('../../server/data/xml/rss'),
-
-    configUtils     = require('../utils/configUtils');
+    sandbox = sinon.sandbox.create();
 
 // Helper function to prevent unit tests
 // from failing via timeout when they
@@ -24,7 +22,7 @@ function failTest(done) {
 }
 
 describe('RSS', function () {
-    var sandbox, req, res, posts;
+    var req, res, posts;
 
     before(function () {
         posts = _.cloneDeep(testUtils.DataGenerator.forKnex.posts);
@@ -32,14 +30,11 @@ describe('RSS', function () {
             return post.status === 'published' && post.page === false;
         });
 
-        _.each(posts, function (post) {
+        _.each(posts, function (post, i) {
+            post.id = i;
             post.url = '/' + post.slug + '/';
             post.author = {name: 'Joe Bloggs'};
         });
-    });
-
-    beforeEach(function () {
-        sandbox = sinon.sandbox.create();
     });
 
     afterEach(function () {
@@ -92,6 +87,7 @@ describe('RSS', function () {
                 xmlData.should.match(/<channel><title><!\[CDATA\[Test Title\]\]><\/title>/);
                 xmlData.should.match(/<description><!\[CDATA\[Testing Desc\]\]><\/description>/);
                 xmlData.should.match(/<link>http:\/\/my-ghost-blog.com\/<\/link>/);
+                xmlData.should.match(/<image><url>http:\/\/my-ghost-blog.com\/favicon.png<\/url><title>Test Title<\/title><link>http:\/\/my-ghost-blog.com\/<\/link><\/image>/);
                 xmlData.should.match(/<generator>Ghost 0.6<\/generator>/);
                 xmlData.should.match(/<lastBuildDate>.*?<\/lastBuildDate>/);
                 xmlData.should.match(/<atom:link href="http:\/\/my-ghost-blog.com\/rss\/" rel="self"/);
@@ -123,6 +119,7 @@ describe('RSS', function () {
                 xmlData.should.match(/<item><title><!\[CDATA\[HTML Ipsum\]\]><\/title>/);
                 xmlData.should.match(/<description><!\[CDATA\[<h1>HTML Ipsum Presents<\/h1>/);
                 xmlData.should.match(/<link>http:\/\/my-ghost-blog.com\/html-ipsum\/<\/link>/);
+                xmlData.should.match(/<image><url>http:\/\/my-ghost-blog.com\/favicon.png<\/url><title>Test Title<\/title><link>http:\/\/my-ghost-blog.com\/<\/link><\/image>/);
                 xmlData.should.match(/<guid isPermaLink="false">/);
                 xmlData.should.match(/<\/guid><dc:creator><!\[CDATA\[Joe Bloggs\]\]><\/dc:creator>/);
                 xmlData.should.match(/<pubDate>Thu, 01 Jan 2015/);
@@ -148,6 +145,42 @@ describe('RSS', function () {
             rss(req, res, failTest(done));
         });
 
+        it('should only return visible tags', function (done) {
+            var postWithTags = posts[2];
+            postWithTags.tags = [
+                {name: 'public', visibility: 'public'},
+                {name: 'internal', visibility: 'internal'},
+                {name: 'visibility'}
+            ];
+
+            rss.__set__('getData', function () {
+                return Promise.resolve({
+                    title: 'Test Title',
+                    description: 'Testing Desc',
+                    permalinks: '/:slug/',
+                    results: {posts: [postWithTags], meta: {pagination: {pages: 1}}}
+                });
+            });
+
+            res.send = function send(xmlData) {
+                should.exist(xmlData);
+                // item tags
+                xmlData.should.match(/<title><!\[CDATA\[Short and Sweet\]\]>/);
+                xmlData.should.match(/<description><!\[CDATA\[test stuff/);
+                xmlData.should.match(/<content:encoded><!\[CDATA\[<div class="kg-card-markdown"><h2 id="testing">testing<\/h2>\n/);
+                xmlData.should.match(/<img src="http:\/\/placekitten.com\/500\/200"/);
+                xmlData.should.match(/<media:content url="http:\/\/placekitten.com\/500\/200" medium="image"\/>/);
+                xmlData.should.match(/<category><!\[CDATA\[public\]\]/);
+                xmlData.should.match(/<category><!\[CDATA\[visibility\]\]/);
+                xmlData.should.not.match(/<category><!\[CDATA\[internal\]\]/);
+                done();
+            };
+
+            req.channelConfig = channelConfig.get('index');
+            req.channelConfig.isRSS = true;
+            rss(req, res, failTest(done));
+        });
+
         it('should use meta_description and image where available', function (done) {
             rss.__set__('getData', function () {
                 return Promise.resolve({
@@ -164,11 +197,10 @@ describe('RSS', function () {
                 // special/optional tags
                 xmlData.should.match(/<title><!\[CDATA\[Short and Sweet\]\]>/);
                 xmlData.should.match(/<description><!\[CDATA\[test stuff/);
-                xmlData.should.match(/<content:encoded><!\[CDATA\[<h2 id="testing">testing<\/h2>\n\n/);
+                xmlData.should.match(/<content:encoded><!\[CDATA\[<div class="kg-card-markdown"><h2 id="testing">testing<\/h2>\n/);
                 xmlData.should.match(/<img src="http:\/\/placekitten.com\/500\/200"/);
                 xmlData.should.match(/<media:content url="http:\/\/placekitten.com\/500\/200" medium="image"\/>/);
 
-                // done
                 done();
             };
 
@@ -246,6 +278,7 @@ describe('RSS', function () {
 
     describe('dataBuilder', function () {
         var apiBrowseStub, apiTagStub, apiUserStub;
+
         beforeEach(function () {
             apiBrowseStub = sandbox.stub(api.posts, 'browse', function () {
                 return Promise.resolve({posts: [], meta: {pagination: {pages: 3}}});
@@ -271,11 +304,19 @@ describe('RSS', function () {
                 set: sinon.stub()
             };
 
-            configUtils.set({url: 'http://my-ghost-blog.com', theme: {
-                title: 'Test',
-                description: 'Some Text',
-                permalinks: '/:slug/'
-            }});
+            sandbox.stub(settingsCache, 'get', function (key) {
+                var obj = {
+                    title: 'Test',
+                    description: 'Some Text',
+                    permalinks: '/:slug/'
+                };
+
+                return obj[key];
+            });
+
+            configUtils.set({
+                url: 'http://my-ghost-blog.com'
+            });
         });
 
         it('should process the data correctly for the index feed', function (done) {
@@ -301,7 +342,11 @@ describe('RSS', function () {
             // test
             res.send = function send(xmlData) {
                 apiBrowseStub.calledOnce.should.be.true();
-                apiBrowseStub.calledWith({page: 1, filter: 'tags:\'magic\'', include: 'author,tags'}).should.be.true();
+                apiBrowseStub.calledWith({
+                    page: 1,
+                    filter: 'tags:\'magic\'+tags.visibility:\'public\'',
+                    include: 'author,tags'
+                }).should.be.true();
                 apiTagStub.calledOnce.should.be.true();
                 xmlData.should.match(/<channel><title><!\[CDATA\[Magic - Test\]\]><\/title>/);
                 done();
@@ -405,7 +450,7 @@ describe('RSS', function () {
         });
 
         it('Should 404 if page number too big', function (done) {
-            configUtils.set({url: 'http://testurl.com/'});
+            configUtils.set({url: 'http://localhost:82832/'});
 
             req = {params: {page: 4}, route: {path: '/rss/:page/'}};
             req.originalUrl = req.route.path.replace(':page', req.params.page);
@@ -422,7 +467,7 @@ describe('RSS', function () {
         });
 
         it('Redirects to last page if page number too big with subdirectory', function (done) {
-            configUtils.set({url: 'http://testurl.com/blog'});
+            configUtils.set({url: 'http://localhost:82832/blog'});
 
             req = {params: {page: 4}, route: {path: '/rss/:page/'}};
             req.originalUrl = req.route.path.replace(':page', req.params.page);

@@ -1,47 +1,51 @@
 language: node_js
-# When changing node version also update it on lines 26, 28 and 38.
+# When changing node version also update it on lines 34, 36 and 46.
 node_js:
-  - "0.10"
-  - "0.12"
+  - "6"
   - "4"
+
 sudo: false
+
 cache:
   directories:
     - node_modules
-    - core/client/node_modules
-    - core/client/bower_components
+
 addons:
-  firefox: "latest"
-  postgresql: "9.3"
   apt:
     sources:
-      - google-chrome
+      - sourceline: 'deb https://dl.yarnpkg.com/debian/ stable main'
+        key_url: 'https://dl.yarnpkg.com/debian/pubkey.gpg'
     packages:
-      - google-chrome-stable
+      - yarn
+
 env:
   global:
     - GITHUB_OAUTH_KEY=003a44d58f12089d0c0261338298af3813330949
-    - GHOST_NODE_VERSION_CHECK=false
-    - TEST_SUITE=server
   matrix:
     - DB=sqlite3 NODE_ENV=testing
     - DB=mysql NODE_ENV=testing-mysql
-    - DB=pg NODE_ENV=testing-pg
+
 matrix:
   include:
-    - node_js: "0.10"
-      env: TEST_SUITE=client
-    - node_js: "0.10"
+    - node_js: "6"
       env: TEST_SUITE=lint
+  fast_finish: true
+
+branches:
+  except:
+    - /^greenkeeper-.+$/
+
 before_install:
   - if [ $DB == "mysql" ]; then mysql -e 'create database ghost_testing'; fi
-  - if [ $DB == "pg" ]; then psql -c 'create database ghost_testing;' -U postgres; fi
-before_script:
-  - if [ $TEST_SUITE == "client" ]; then export DISPLAY=:99; sh -e /etc/init.d/xvfb start; sleep 3; fi
+
+install:
+  - yarn
+  - if [ "$DB" == "sqlite3" ]; then yarn add --force sqlite3; fi # fix sqlite caching issues
+
 after_success:
   - |
       if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then
-        if [[ "$DB" = "sqlite3" && "$TRAVIS_NODE_VERSION" = "0.10" ]]; then
+        if [[ "$DB" = "sqlite3" && "$TRAVIS_NODE_VERSION" = "6" ]]; then
           echo "Generate coverage..."
           grunt coverage
           npm install -g codeclimate-test-reporter

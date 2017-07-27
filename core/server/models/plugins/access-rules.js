@@ -1,6 +1,6 @@
 // # Access Rules
 //
-// Extends Bookshelf.Model.force to take a 'context' option which provides information on how this query should
+// Extends Bookshelf.Model.forge to take a 'context' option which provides information on how this query should
 // be treated in terms of data access rules - currently just detecting public requests
 module.exports = function (Bookshelf) {
     var model = Bookshelf.Model,
@@ -11,6 +11,7 @@ module.exports = function (Bookshelf) {
          * Cached copy of the context setup for this model instance
          */
         _context: null,
+
         /**
          * ## Is Public Context?
          * A helper to determine if this is a public request or not
@@ -18,6 +19,10 @@ module.exports = function (Bookshelf) {
          */
         isPublicContext: function isPublicContext() {
             return !!(this._context && this._context.public);
+        },
+
+        isInternalContext: function isInternalContext() {
+            return !!(this._context && this._context.internal);
         }
     },
     {

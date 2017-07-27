@@ -1,5 +1,5 @@
-/*globals describe, it*/
-var getMetaDescription = require('../../../server/data/meta/description');
+var should = require('should'), // jshint ignore:line
+    getMetaDescription = require('../../../server/data/meta/description');
 
 describe('getMetaDescription', function () {
     it('should return meta_description if on data root', function () {
@@ -59,6 +59,17 @@ describe('getMetaDescription', function () {
             context: ['post']
         });
         description.should.equal('Best post ever!');
+    });
+
+    it('should return data post meta description if on root context contains post for an AMP post', function () {
+        var description = getMetaDescription({
+            post: {
+                meta_description: 'Best AMP post ever!'
+            }
+        }, {
+            context: ['amp', 'post']
+        });
+        description.should.equal('Best AMP post ever!');
     });
 
     it('should return data post meta description if on root context contains page', function () {

@@ -1,25 +1,13 @@
-/*globals describe, before, beforeEach, it*/
-var should         = require('should'),
-    hbs            = require('express-hbs'),
-    utils          = require('./utils'),
+var should = require('should'), // jshint ignore:line
 
 // Stuff we are testing
-    handlebars      = hbs.handlebars,
-    helpers         = require('../../../server/helpers');
+    helpers = require('../../../server/helpers');
 
 describe('{{page_url}} helper', function () {
     var options = {data: {root: {pagination: {}}}};
 
-    before(function () {
-        utils.loadHelpers();
-    });
-
     beforeEach(function () {
         options.data.root = {pagination: {}};
-    });
-
-    it('has loaded page_url helper', function () {
-        should.exist(handlebars.helpers.page_url);
     });
 
     it('can return a valid url when the relative URL is /', function () {
@@ -45,38 +33,12 @@ describe('{{page_url}} helper', function () {
         helpers.page_url('next', options).should.eql('/tag/pumpkin/page/10/');
         helpers.page_url('prev', options).should.eql('/tag/pumpkin/page/2/');
     });
-});
 
-describe('{{pageUrl}} helper [DEPRECATED]', function () {
-    var options = {data: {root: {pagination: {}}}};
-
-    before(function () {
-        utils.loadHelpers();
-    });
-
-    it('has loaded pageUrl helper', function () {
-        should.exist(handlebars.helpers.pageUrl);
-    });
-
-    it('should do the same thing as page_url when the relative URL is /', function () {
-        options.data.root.relativeUrl = '/';
-        options.data.root.pagination.next = 5;
-        options.data.root.pagination.prev = 7;
-
-        helpers.pageUrl(1, options).should.eql(helpers.page_url(1, options));
-        helpers.pageUrl(20, options).should.eql(helpers.page_url(20, options));
-        helpers.pageUrl('next', options).should.eql(helpers.page_url('next', options));
-        helpers.pageUrl('prev', options).should.eql(helpers.page_url('prev', options));
-    });
-
-    it('should do the same thing as page_url when the relative url has a path', function () {
+    it('should assume 1 if page is undefined', function () {
         options.data.root.relativeUrl = '/tag/pumpkin/';
-        options.data.root.pagination.next = 12;
-        options.data.root.pagination.prev = 9;
+        options.data.root.pagination.next = 10;
+        options.data.root.pagination.prev = 2;
 
-        helpers.pageUrl(1, options).should.eql(helpers.page_url(1, options));
-        helpers.pageUrl(20, options).should.eql(helpers.page_url(20, options));
-        helpers.pageUrl('next', options).should.eql(helpers.page_url('next', options));
-        helpers.pageUrl('prev', options).should.eql(helpers.page_url('prev', options));
+        helpers.page_url(options).should.equal(helpers.page_url(1, options));
     });
 });

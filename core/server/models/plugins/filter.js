@@ -24,12 +24,13 @@ filterUtils = {
             custom = _.map(custom, function (arg) {
                 return _.isString(arg) ? gql.parse(arg) : arg;
             });
-        } catch (error) {
-            errors.logAndThrowError(
-                new errors.ValidationError(error.message, 'filter'),
-                i18n.t('errors.models.plugins.filter.errorParsing'),
-                i18n.t('errors.models.plugins.filter.forInformationRead', {url: 'http://api.ghost.org/docs/filter'})
-            );
+        } catch (err) {
+            throw new errors.ValidationError({
+                err: err,
+                property: 'filter',
+                context: i18n.t('errors.models.plugins.filter.errorParsing'),
+                help: i18n.t('errors.models.plugins.filter.forInformationRead', {url: 'http://api.ghost.org/docs/filter'})
+            });
         }
 
         // Merge custom filter options into a single set of statements
@@ -118,6 +119,7 @@ filter = function filter(Bookshelf) {
                     .query('join', 'users as author', 'author.id', '=', 'posts.author_id');
             }
         },
+
         /**
          * ## fetchAndCombineFilters
          * Helper method, uses the combineFilters util to apply filters to the current model instance
@@ -137,6 +139,7 @@ filter = function filter(Bookshelf) {
 
             return this;
         },
+
         /**
          * ## Apply Filters
          * Method which makes the necessary query builder calls (through knex) for the filters set
@@ -144,7 +147,7 @@ filter = function filter(Bookshelf) {
          * @param {Object} options
          * @returns {Bookshelf.Model}
          */
-        applyFilters: function applyFilters(options) {
+        applyDefaultAndCustomFilters: function applyDefaultAndCustomFilters(options) {
             var self = this;
 
             // @TODO figure out a better place/way to trigger loading filters

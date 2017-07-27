@@ -2,7 +2,7 @@
 
 This is a plain English summary of all of the components within Ghost which may affect your privacy in some way. Please keep in mind that if you use third party Themes or Apps with Ghost, there may be additional things not listed here.
 
-Each of the items listed in this document can be disabled via Ghost's `config.js` file. Check out the [configuration guide](http://support.ghost.org/config/) for details.
+Each of the items listed in this document can be disabled via Ghost's `config.js` file. Check out the [configuration guide](https://docs.ghost.org/v1.0.0/docs/configuring-ghost) for details.
 
 ## Official Services
 
@@ -19,11 +19,6 @@ This service can be disabled at any time. All of the information and code relate
 ## Third Party Services
 
 Ghost uses a number of third party services for specific functionality within Ghost.
-
-
-### Google Fonts
-
-Ghost makes use of the Open Sans [Google Font](https://www.google.com/fonts), which is loaded into the Ghost admin area to provide a typographically stimulating experience.
 
 ### Gravatar
 
@@ -48,4 +43,4 @@ Ghost outputs basic meta tags to allow rich snippets of your content to be recog
 
 ### Default Theme
 
-The default theme which comes with Ghost loads a copy of jQuery from the jQuery Foundation's [public CDN](https://code.jquery.com/jquery-1.11.3.min.js). The theme also contains three sharing buttons to [Twitter](http://twitter.com), [Facebook](http://facebook.com), and [Google Plus](http://plus.google.com). No resources are loaded from any services, however the buttons do allow visitors to your blog to share your content publicly on these respective networks.
+The default theme which comes with Ghost loads a copy of jQuery from the jQuery Foundation's [public CDN](https://code.jquery.com/jquery-1.11.3.min.js), and makes use of the Open Sans [Google Font](https://www.google.com/fonts). The theme also contains three sharing buttons to [Twitter](http://twitter.com), [Facebook](http://facebook.com), and [Google Plus](http://plus.google.com). No resources are loaded from any services, however the buttons do allow visitors to your blog to share your content publicly on these respective networks.

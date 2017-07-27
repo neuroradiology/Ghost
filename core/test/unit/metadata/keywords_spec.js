@@ -1,8 +1,12 @@
-/*globals describe, it*/
-var getKeywords = require('../../../server/data/meta/keywords'),
-    should = require('should');
+var should = require('should'),
+    sinon = require('sinon'),
+    getKeywords = require('../../../server/data/meta/keywords'),
+    sandbox = sinon.sandbox.create();
 
 describe('getKeywords', function () {
+    afterEach(function () {
+        sandbox.restore();
+    });
     it('should return tags as keywords if post has tags', function () {
         var keywords = getKeywords({
             post: {
@@ -14,6 +18,20 @@ describe('getKeywords', function () {
             }
         });
         should.deepEqual(keywords, ['one', 'two', 'three']);
+    });
+
+    it('should only return visible tags', function () {
+        var keywords = getKeywords({
+            post: {
+                tags: [
+                    {name: 'one', visibility: 'public'},
+                    {name: 'two', visibility: 'internal'},
+                    {name: 'three'},
+                    {name: 'four', visibility: 'internal'}
+                ]
+            }
+        });
+        should.deepEqual(keywords, ['one', 'three']);
     });
 
     it('should return null if post has tags is empty array', function () {

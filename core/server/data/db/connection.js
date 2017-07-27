@@ -1,36 +1,28 @@
-var knex     = require('knex'),
-    config   = require('../../config'),
-    dbConfig = config.database,
+var knex = require('knex'),
+    config = require('../../config'),
     knexInstance;
 
+// @TODO:
+// - if you require this file before config file was loaded,
+// - then this file is cached and you have no chance to connect to the db anymore
+// - bring dynamic into this file (db.connect())
 function configure(dbConfig) {
-    var client = dbConfig.client,
-        pg;
-
-    if (client === 'pg' || client === 'postgres' || client === 'postgresql') {
-        try {
-            pg = require('pg');
-        } catch (e) {
-            pg = require('pg.js');
-        }
-
-        // By default PostgreSQL returns data as strings along with an OID that identifies
-        // its type.  We're setting the parser to convert OID 20 (int8) into a javascript
-        // integer.
-        pg.types.setTypeParser(20, function (val) {
-            return val === null ? null : parseInt(val, 10);
-        });
-    }
+    var client = dbConfig.client;
 
     if (client === 'sqlite3') {
         dbConfig.useNullAsDefault = dbConfig.useNullAsDefault || false;
     }
 
+    if (client === 'mysql') {
+        dbConfig.connection.timezone = 'UTC';
+        dbConfig.connection.charset = 'utf8mb4';
+    }
+
     return dbConfig;
 }
 
-if (!knexInstance && dbConfig && dbConfig.client) {
-    knexInstance = knex(configure(dbConfig));
+if (!knexInstance && config.get('database') && config.get('database').client) {
+    knexInstance = knex(configure(config.get('database')));
 }
 
 module.exports = knexInstance;

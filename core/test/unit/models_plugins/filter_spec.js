@@ -1,4 +1,3 @@
-/*globals describe, it, before, beforeEach, afterEach */
 var should = require('should'),
     sinon = require('sinon'),
     rewire = require('rewire'),
@@ -52,14 +51,18 @@ describe('Filter', function () {
             });
 
             it('should set _filters to be the result of combineFilters', function () {
-                filterUtils.combineFilters.returns({statements: [
-                    {prop: 'page', op: '=', value: true}
-                ]});
+                filterUtils.combineFilters.returns({
+                    statements: [
+                        {prop: 'page', op: '=', value: true}
+                    ]
+                });
                 var result = ghostBookshelf.Model.prototype.fetchAndCombineFilters();
 
-                result._filters.should.eql({statements: [
-                    {prop: 'page', op: '=', value: true}
-                ]});
+                result._filters.should.eql({
+                    statements: [
+                        {prop: 'page', op: '=', value: true}
+                    ]
+                });
             });
 
             it('should call combineFilters with undefined x4 if passed no options', function () {
@@ -72,7 +75,7 @@ describe('Filter', function () {
 
             it('should call combineFilters with enforced filters if set', function () {
                 var filterSpy = sandbox.stub(ghostBookshelf.Model.prototype, 'enforcedFilters')
-                    .returns('status:published'),
+                        .returns('status:published'),
                     result;
 
                 result = ghostBookshelf.Model.prototype.fetchAndCombineFilters();
@@ -153,7 +156,7 @@ describe('Filter', function () {
             });
         });
 
-        describe('Apply Filters', function () {
+        describe('Apply Default and Custom Filters', function () {
             var fetchSpy,
                 restoreGQL,
                 filterGQL;
@@ -174,7 +177,7 @@ describe('Filter', function () {
             });
 
             it('should call fetchAndCombineFilters if _filters not set', function () {
-                var result = ghostBookshelf.Model.prototype.applyFilters();
+                var result = ghostBookshelf.Model.prototype.applyDefaultAndCustomFilters();
 
                 fetchSpy.calledOnce.should.be.true();
                 should(result._filters).be.null();
@@ -183,32 +186,38 @@ describe('Filter', function () {
             it('should NOT call fetchAndCombineFilters if _filters IS set', function () {
                 ghostBookshelf.Model.prototype._filters = 'test';
 
-                var result = ghostBookshelf.Model.prototype.applyFilters();
+                var result = ghostBookshelf.Model.prototype.applyDefaultAndCustomFilters();
 
                 fetchSpy.called.should.be.false();
                 result._filters.should.eql('test');
             });
 
             it('should call knexify with the filters that are set', function () {
-                ghostBookshelf.Model.prototype._filters = {statements: [
-                    {prop: 'title', op: '=', value: 'Hello Word'}
-                ]};
-                ghostBookshelf.Model.prototype.applyFilters();
+                ghostBookshelf.Model.prototype._filters = {
+                    statements: [
+                        {prop: 'title', op: '=', value: 'Hello Word'}
+                    ]
+                };
+                ghostBookshelf.Model.prototype.applyDefaultAndCustomFilters();
 
                 fetchSpy.called.should.be.false();
                 filterGQL.knexify.called.should.be.true();
-                filterGQL.knexify.firstCall.args[1].should.eql({statements: [
-                    {prop: 'title', op: '=', value: 'Hello Word'}
-                ]});
+                filterGQL.knexify.firstCall.args[1].should.eql({
+                    statements: [
+                        {prop: 'title', op: '=', value: 'Hello Word'}
+                    ]
+                });
             });
 
             it('should print statements in debug mode', function () {
                 ghostBookshelf.Model.prototype.debug = true;
-                ghostBookshelf.Model.prototype._filters = {statements: [
-                    {prop: 'tags', op: 'IN', value: ['photo', 'video']}
-                ]};
+                ghostBookshelf.Model.prototype._filters = {
+                    statements: [
+                        {prop: 'tags', op: 'IN', value: ['photo', 'video']}
+                    ]
+                };
 
-                ghostBookshelf.Model.prototype.applyFilters();
+                ghostBookshelf.Model.prototype.applyDefaultAndCustomFilters();
                 filterGQL.json.printStatements.calledOnce.should.be.true();
                 filterGQL.json.printStatements.firstCall.args[0].should.eql([
                     {prop: 'tags', op: 'IN', value: ['photo', 'video']}
@@ -373,12 +382,16 @@ describe('Filter', function () {
                 it('should try to reduce custom filters if custom and enforced are provided', function () {
                     combineFilters('status:published', null, 'tag:photo').should.eql({
                         statements: [
-                            {group: [
-                                {prop: 'status', op: '=', value: 'published'}
-                            ]},
-                            {group: [
-                                {prop: 'tag', op: '=', value: 'photo'}
-                            ], func: 'and'}
+                            {
+                                group: [
+                                    {prop: 'status', op: '=', value: 'published'}
+                                ]
+                            },
+                            {
+                                group: [
+                                    {prop: 'tag', op: '=', value: 'photo'}
+                                ], func: 'and'
+                            }
                         ]
                     });
                     parseSpy.calledTwice.should.be.true();
@@ -397,12 +410,16 @@ describe('Filter', function () {
                 it('should actually reduce custom filters if one matches enforced', function () {
                     combineFilters('status:published', null, 'tag:photo,status:draft').should.eql({
                         statements: [
-                            {group: [
-                                {prop: 'status', op: '=', value: 'published'}
-                            ]},
-                            {group: [
-                                {prop: 'tag', op: '=', value: 'photo'}
-                            ], func: 'and'}
+                            {
+                                group: [
+                                    {prop: 'status', op: '=', value: 'published'}
+                                ]
+                            },
+                            {
+                                group: [
+                                    {prop: 'tag', op: '=', value: 'photo'}
+                                ], func: 'and'
+                            }
                         ]
                     });
 
@@ -448,12 +465,16 @@ describe('Filter', function () {
                 it('should try to reduce default filters if default and custom are provided', function () {
                     combineFilters(null, 'page:false', 'tag:photo').should.eql({
                         statements: [
-                            {group: [
-                                {prop: 'page', op: '=', value: false}
-                            ]},
-                            {group: [
-                                {prop: 'tag', op: '=', value: 'photo'}
-                            ], func: 'and'}
+                            {
+                                group: [
+                                    {prop: 'page', op: '=', value: false}
+                                ]
+                            },
+                            {
+                                group: [
+                                    {prop: 'tag', op: '=', value: 'photo'}
+                                ], func: 'and'
+                            }
                         ]
                     });
 
@@ -473,14 +494,18 @@ describe('Filter', function () {
                 it('should actually reduce default filters if one matches custom', function () {
                     combineFilters(null, 'page:false,author:cameron', 'tag:photo+page:true').should.eql({
                         statements: [
-                            {group: [
-                                // currently has func: or needs fixing
-                                {prop: 'author', op: '=', value: 'cameron'}
-                            ]},
-                            {group: [
-                                {prop: 'tag', op: '=', value: 'photo'},
-                                {prop: 'page', op: '=', value: true, func: 'and'}
-                            ], func: 'and'}
+                            {
+                                group: [
+                                    // currently has func: or needs fixing
+                                    {prop: 'author', op: '=', value: 'cameron'}
+                                ]
+                            },
+                            {
+                                group: [
+                                    {prop: 'tag', op: '=', value: 'photo'},
+                                    {prop: 'page', op: '=', value: true, func: 'and'}
+                                ], func: 'and'
+                            }
                         ]
                     });
 
@@ -539,13 +564,17 @@ describe('Filter', function () {
                 it('should return a merger of enforced and defaults plus custom filters if provided', function () {
                     combineFilters('status:published', 'page:false', 'tag:photo').should.eql({
                         statements: [
-                            {group: [
-                                {prop: 'status', op: '=', value: 'published'},
-                                {prop: 'page', op: '=', value: false, func: 'and'}
-                            ]},
-                            {group: [
-                                {prop: 'tag', op: '=', value: 'photo'}
-                            ], func: 'and'}
+                            {
+                                group: [
+                                    {prop: 'status', op: '=', value: 'published'},
+                                    {prop: 'page', op: '=', value: false, func: 'and'}
+                                ]
+                            },
+                            {
+                                group: [
+                                    {prop: 'tag', op: '=', value: 'photo'}
+                                ], func: 'and'
+                            }
                         ]
                     });
 
@@ -571,14 +600,18 @@ describe('Filter', function () {
                 it('should handle getting enforced, default and multiple custom filters', function () {
                     combineFilters('status:published', 'page:false', 'tag:[photo,video],author:cameron', 'status:draft,page:false').should.eql({
                         statements: [
-                            {group: [
-                                {prop: 'status', op: '=', value: 'published'}
-                            ]},
-                            {group: [
-                                {prop: 'tag', op: 'IN', value: ['photo', 'video']},
-                                {prop: 'author', op: '=', value: 'cameron', func: 'or'},
-                                {prop: 'page', op: '=', value: false, func: 'or'}
-                            ], func: 'and'}
+                            {
+                                group: [
+                                    {prop: 'status', op: '=', value: 'published'}
+                                ]
+                            },
+                            {
+                                group: [
+                                    {prop: 'tag', op: 'IN', value: ['photo', 'video']},
+                                    {prop: 'author', op: '=', value: 'cameron', func: 'or'},
+                                    {prop: 'page', op: '=', value: false, func: 'or'}
+                                ], func: 'and'
+                            }
                         ]
                     });
 

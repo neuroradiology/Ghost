@@ -1,6 +1,5 @@
-/*globals describe, it*/
-var getRssUrl = require('../../../server/data/meta/rss_url'),
-    should = require('should');
+var should = require('should'),
+    getRssUrl = require('../../../server/data/meta/rss_url');
 
 describe('getRssUrl', function () {
     it('should return rss url', function () {

@@ -2,24 +2,37 @@
 // Usage: `{{#foreach data}}{{/foreach}}`
 //
 // Block helper designed for looping through posts
-var hbs             = require('express-hbs'),
-    _               = require('lodash'),
-    errors          = require('../errors'),
-    i18n            = require('../i18n'),
+var proxy = require('./proxy'),
+    _ = require('lodash'),
+    logging = proxy.logging,
+    i18n = proxy.i18n,
+    visibilityUtils = proxy.visibility,
+    hbsUtils = proxy.hbs.Utils,
+    createFrame = proxy.hbs.handlebars.createFrame;
 
-    hbsUtils        = hbs.handlebars.Utils,
-    foreach;
+function filterItemsByVisibility(items, options) {
+    var visibility = visibilityUtils.parser(options);
 
-foreach = function (itemType, options) {
+    return visibilityUtils.filter(items, visibility, !!options.hash.visibility);
+}
+
+module.exports = function foreach(items, options) {
     if (!options) {
-        errors.logWarn(i18n.t('warnings.helpers.foreach.iteratorNeeded'));
+        logging.warn(i18n.t('warnings.helpers.foreach.iteratorNeeded'));
     }
+
+    if (hbsUtils.isFunction(items)) {
+        items = items.call(this);
+    }
+
+    // Exclude items which should not be visible in the theme
+    items = filterItemsByVisibility(items, options);
 
     // Initial values set based on parameters sent through. If nothing sent, set to defaults
     var fn = options.fn,
         inverse = options.inverse,
         columns = options.hash.columns,
-        length = _.size(itemType),
+        length = _.size(items),
         limit = parseInt(options.hash.limit, 10) || length,
         from = parseInt(options.hash.from, 10) || 1,
         to = parseInt(options.hash.to, 10) || length,
@@ -37,12 +50,8 @@ foreach = function (itemType, options) {
         contextPath = hbsUtils.appendContextPath(options.data.contextPath, options.ids[0]) + '.';
     }
 
-    if (hbsUtils.isFunction(itemType)) {
-        itemType = itemType.call(this);
-    }
-
     if (options.data) {
-        data = hbs.handlebars.createFrame(options.data);
+        data = createFrame(options.data);
     }
 
     function execIteration(field, index, last) {
@@ -61,10 +70,10 @@ foreach = function (itemType, options) {
             }
         }
 
-        output = output + fn(itemType[field], {
-            data: data,
-            blockParams: hbsUtils.blockParams([itemType[field], field], [contextPath + field, null])
-        });
+        output = output + fn(items[field], {
+                data: data,
+                blockParams: hbsUtils.blockParams([items[field], field], [contextPath + field, null])
+            });
     }
 
     function iterateCollection(context) {
@@ -88,8 +97,8 @@ foreach = function (itemType, options) {
         });
     }
 
-    if (itemType && typeof itemType === 'object') {
-        iterateCollection(itemType);
+    if (items && typeof items === 'object') {
+        iterateCollection(items);
     }
 
     if (length === 0) {
@@ -98,5 +107,3 @@ foreach = function (itemType, options) {
 
     return output;
 };
-
-module.exports = foreach;

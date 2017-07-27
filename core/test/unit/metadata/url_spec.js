@@ -1,11 +1,12 @@
-/*globals describe, it*/
-var getUrl = require('../../../server/data/meta/url');
+var should = require('should'), // jshint ignore:line
+    getUrl = require('../../../server/data/meta/url'),
+    markdownToMobiledoc = require('../../utils/fixtures/data-generator').markdownToMobiledoc;
 
 describe('getUrl', function () {
     it('should return url for a post', function () {
         var url = getUrl({
             html: '<p>Welcome to my post.</p>',
-            markdown: 'Welcome to my post.',
+            mobiledoc: markdownToMobiledoc('Welcome to my post.'),
             title: 'Welcome Post',
             slug: 'welcome-post',
             url: '/post/welcome-post/'
@@ -16,12 +17,38 @@ describe('getUrl', function () {
     it('should return absolute url for a post', function () {
         var url = getUrl({
             html: '<p>Welcome to my post.</p>',
-            markdown: 'Welcome to my post.',
+            mobiledoc: markdownToMobiledoc('Welcome to my post.'),
             title: 'Welcome Post',
             slug: 'welcome-post',
             url: '/post/welcome-post/'
         }, true);
         url.should.equal('http://127.0.0.1:2369/post/welcome-post/');
+    });
+
+    it('should return url for a post and remove /amp/ in url', function () {
+        var url = getUrl({
+            relativeUrl: '/welcome-post/amp/',
+            post: {
+                html: '<p>Welcome to my post.</p>',
+                title: 'Welcome Post',
+                slug: 'welcome-post',
+                url: '/welcome-post/amp/'
+            }
+        });
+        url.should.equal('/welcome-post/');
+    });
+
+    it('should return absolute url for a post and remove /amp/ in url', function () {
+        var url = getUrl({
+            relativeUrl: '/welcome-post/amp/',
+            post: {
+                html: '<p>Welcome to my post.</p>',
+                title: 'Welcome Post',
+                slug: 'welcome-post',
+                url: '/welcome-post/amp/'
+            }
+        }, true);
+        url.should.equal('http://127.0.0.1:2369/welcome-post/');
     });
 
     it('should return url for a tag', function () {
@@ -92,8 +119,15 @@ describe('getUrl', function () {
 
     it('should return url for a context object with relative url', function () {
         var url = getUrl({
-            relativeUrl: '/my/relitive/url/'
+            relativeUrl: '/my/relative/url/'
         });
-        url.should.equal('/my/relitive/url/');
+        url.should.equal('/my/relative/url/');
+    });
+
+    it('should return url for a context object with relative url and remove /amp/ in url', function () {
+        var url = getUrl({
+            relativeUrl: '/my/relative/url/amp/'
+        });
+        url.should.equal('/my/relative/url/');
     });
 });
