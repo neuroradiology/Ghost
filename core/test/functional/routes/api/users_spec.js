@@ -1,5 +1,7 @@
 var should = require('should'),
+    _ = require('lodash'),
     supertest = require('supertest'),
+    moment = require('moment'),
     testUtils = require('../../../utils'),
     ObjectId = require('bson-objectid'),
     config = require('../../../../../core/server/config'),
@@ -12,61 +14,57 @@ describe('User API', function () {
         authorAccessToken = '',
         editor, author, ghostServer, inactiveUser;
 
-    beforeEach(function (done) {
-        // starting ghost automatically populates the db
-        // TODO: prevent db init, and manage bringing up the DB with fixtures ourselves
-        ghost().then(function (_ghostServer) {
-            ghostServer = _ghostServer;
-            return ghostServer.start();
-        }).then(function () {
-            request = supertest.agent(config.get('url'));
-        }).then(function () {
-            // create editor
-            return testUtils.createUser({
-                user: testUtils.DataGenerator.forKnex.createUser({email: 'test+1@ghost.org'}),
-                role: testUtils.DataGenerator.Content.roles[1]
-            });
-        }).then(function (_user1) {
-            editor = _user1;
-
-            // create author
-            return testUtils.createUser({
-                user: testUtils.DataGenerator.forKnex.createUser({email: 'test+2@ghost.org'}),
-                role: testUtils.DataGenerator.Content.roles[2]
-            });
-        }).then(function (_user2) {
-            author = _user2;
-
-            // create inactive user
-            return testUtils.createUser({
-                user: testUtils.DataGenerator.forKnex.createUser({email: 'test+3@ghost.org', status: 'inactive'}),
-                role: testUtils.DataGenerator.Content.roles[2]
-            });
-        }).then(function (_user3) {
-            inactiveUser = _user3;
-
-            // by default we login with the owner
-            return testUtils.doAuth(request);
-        }).then(function (token) {
-            ownerAccessToken = token;
-
-            request.user = editor;
-            return testUtils.doAuth(request);
-        }).then(function (token) {
-            editorAccessToken = token;
-
-            request.user = author;
-            return testUtils.doAuth(request);
-        }).then(function (token) {
-            authorAccessToken = token;
-            done();
-        }).catch(done);
-    });
-
-    afterEach(function () {
-        return testUtils.clearData()
+    before(function () {
+        return ghost()
+            .then(function (_ghostServer) {
+                ghostServer = _ghostServer;
+                request = supertest.agent(config.get('url'));
+            })
             .then(function () {
-                return ghostServer.stop();
+                // create editor
+                return testUtils.createUser({
+                    user: testUtils.DataGenerator.forKnex.createUser({email: 'test+1@ghost.org'}),
+                    role: testUtils.DataGenerator.Content.roles[1].name
+                });
+            })
+            .then(function (_user1) {
+                editor = _user1;
+
+                // create author
+                return testUtils.createUser({
+                    user: testUtils.DataGenerator.forKnex.createUser({email: 'test+2@ghost.org'}),
+                    role: testUtils.DataGenerator.Content.roles[2].name
+                });
+            })
+            .then(function (_user2) {
+                author = _user2;
+
+                // create inactive user
+                return testUtils.createUser({
+                    user: testUtils.DataGenerator.forKnex.createUser({email: 'test+3@ghost.org', status: 'inactive'}),
+                    role: testUtils.DataGenerator.Content.roles[2].name
+                });
+            })
+            .then(function (_user3) {
+                inactiveUser = _user3;
+
+                // by default we login with the owner
+                return testUtils.doAuth(request);
+            })
+            .then(function (token) {
+                ownerAccessToken = token;
+
+                request.user = editor;
+                return testUtils.doAuth(request);
+            })
+            .then(function (token) {
+                editorAccessToken = token;
+
+                request.user = author;
+                return testUtils.doAuth(request);
+            })
+            .then(function (token) {
+                authorAccessToken = token;
             });
     });
 
@@ -312,6 +310,52 @@ describe('User API', function () {
                     });
             });
 
+            it('can retrieve a user by slug with count.posts', function (done) {
+                request.get(testUtils.API.getApiQuery('users/slug/joe-bloggs/?include=count.posts'))
+                    .set('Authorization', 'Bearer ' + ownerAccessToken)
+                    .expect('Content-Type', /json/)
+                    .expect('Cache-Control', testUtils.cacheRules.private)
+                    .expect(200)
+                    .end(function (err, res) {
+                        if (err) {
+                            return done(err);
+                        }
+
+                        should.not.exist(res.headers['x-cache-invalidate']);
+                        var jsonResponse = res.body;
+                        should.exist(jsonResponse.users);
+                        should.not.exist(jsonResponse.meta);
+
+                        jsonResponse.users.should.have.length(1);
+                        testUtils.API.checkResponse(jsonResponse.users[0], 'user', ['count']);
+
+                        done();
+                    });
+            });
+
+            it('can retrieve a user by id with count.posts', function (done) {
+                request.get(testUtils.API.getApiQuery('users/1/?include=count.posts'))
+                    .set('Authorization', 'Bearer ' + ownerAccessToken)
+                    .expect('Content-Type', /json/)
+                    .expect('Cache-Control', testUtils.cacheRules.private)
+                    .expect(200)
+                    .end(function (err, res) {
+                        if (err) {
+                            return done(err);
+                        }
+
+                        should.not.exist(res.headers['x-cache-invalidate']);
+                        var jsonResponse = res.body;
+                        should.exist(jsonResponse.users);
+                        should.not.exist(jsonResponse.meta);
+
+                        jsonResponse.users.should.have.length(1);
+                        testUtils.API.checkResponse(jsonResponse.users[0], 'user', ['count']);
+
+                        done();
+                    });
+            });
+
             it('can\'t retrieve non existent user by id', function (done) {
                 request.get(testUtils.API.getApiQuery('users/' + ObjectId.generate() + '/'))
                     .set('Authorization', 'Bearer ' + ownerAccessToken)
@@ -422,11 +466,59 @@ describe('User API', function () {
                             .set('Authorization', 'Bearer ' + 'invalidtoken')
                             .send(jsonResponse)
                             .expect(401)
-                            .end(function (err, res) {
-                                /*jshint unused:false*/
+                            .end(function (err) {
                                 if (err) {
                                     return done(err);
                                 }
+
+                                done();
+                            });
+                    });
+            });
+
+            it('check which fields can be modified', function (done) {
+                var existingUserData, modifiedUserData;
+
+                request.get(testUtils.API.getApiQuery('users/me/'))
+                    .set('Authorization', 'Bearer ' + ownerAccessToken)
+                    .expect('Content-Type', /json/)
+                    .expect('Cache-Control', testUtils.cacheRules.private)
+                    .end(function (err, res) {
+                        if (err) {
+                            return done(err);
+                        }
+
+                        var jsonResponse = res.body;
+                        should.exist(jsonResponse.users[0]);
+                        existingUserData = _.cloneDeep(jsonResponse.users[0]);
+                        modifiedUserData = _.cloneDeep(jsonResponse);
+
+                        existingUserData.created_by.should.eql('1');
+                        existingUserData.updated_by.should.eql('1');
+
+                        modifiedUserData.users[0].created_at = moment().add(2, 'days').format();
+                        modifiedUserData.users[0].updated_at = moment().add(2, 'days').format();
+                        modifiedUserData.users[0].created_by = ObjectId.generate();
+                        modifiedUserData.users[0].updated_by = ObjectId.generate();
+
+                        delete jsonResponse.users[0].id;
+
+                        request.put(testUtils.API.getApiQuery('users/me/'))
+                            .set('Authorization', 'Bearer ' + ownerAccessToken)
+                            .send(jsonResponse)
+                            .expect(200)
+                            .end(function (err, res) {
+                                if (err) {
+                                    return done(err);
+                                }
+
+                                var jsonResponse = res.body;
+                                should.exist(jsonResponse.users[0]);
+
+                                jsonResponse.users[0].created_by.should.eql(existingUserData.created_by);
+                                jsonResponse.users[0].updated_by.should.eql(existingUserData.updated_by);
+                                jsonResponse.users[0].updated_at.should.not.eql(modifiedUserData.updated_at);
+                                jsonResponse.users[0].created_at.should.eql(existingUserData.created_at);
 
                                 done();
                             });
@@ -464,6 +556,60 @@ describe('User API', function () {
     });
 
     describe('As Editor', function () {
+        before(function () {
+            return ghost()
+                .then(function (_ghostServer) {
+                    ghostServer = _ghostServer;
+                    request = supertest.agent(config.get('url'));
+                })
+                .then(function () {
+                    // create editor
+                    return testUtils.createUser({
+                        user: testUtils.DataGenerator.forKnex.createUser({email: 'test+1@ghost.org'}),
+                        role: testUtils.DataGenerator.Content.roles[1].name
+                    });
+                })
+                .then(function (_user1) {
+                    editor = _user1;
+
+                    // create author
+                    return testUtils.createUser({
+                        user: testUtils.DataGenerator.forKnex.createUser({email: 'test+2@ghost.org'}),
+                        role: testUtils.DataGenerator.Content.roles[2].name
+                    });
+                })
+                .then(function (_user2) {
+                    author = _user2;
+
+                    // create inactive user
+                    return testUtils.createUser({
+                        user: testUtils.DataGenerator.forKnex.createUser({email: 'test+3@ghost.org', status: 'inactive'}),
+                        role: testUtils.DataGenerator.Content.roles[2].name
+                    });
+                })
+                .then(function (_user3) {
+                    inactiveUser = _user3;
+
+                    // by default we login with the owner
+                    return testUtils.doAuth(request);
+                })
+                .then(function (token) {
+                    ownerAccessToken = token;
+
+                    request.user = editor;
+                    return testUtils.doAuth(request);
+                })
+                .then(function (token) {
+                    editorAccessToken = token;
+
+                    request.user = author;
+                    return testUtils.doAuth(request);
+                })
+                .then(function (token) {
+                    authorAccessToken = token;
+                });
+        });
+
         describe('success cases', function () {
             it('can edit himself', function (done) {
                 request.put(testUtils.API.getApiQuery('users/' + editor.id + '/'))

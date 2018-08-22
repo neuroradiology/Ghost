@@ -1,6 +1,6 @@
 var _ = require('lodash'),
     Promise = require('bluebird'),
-    i18n = require('../../i18n'),
+    common = require('../../lib/common'),
     db = require('../db'),
     schema = require('./schema'),
     clients = require('./clients');
@@ -97,10 +97,10 @@ function getTables(transaction) {
     var client = (transaction || db.knex).client.config.client;
 
     if (_.includes(_.keys(clients), client)) {
-        return clients[client].getTables();
+        return clients[client].getTables(transaction);
     }
 
-    return Promise.reject(i18n.t('notices.data.utils.index.noSupportForDatabase', {client: client}));
+    return Promise.reject(common.i18n.t('notices.data.utils.index.noSupportForDatabase', {client: client}));
 }
 
 function getIndexes(table, transaction) {
@@ -110,7 +110,7 @@ function getIndexes(table, transaction) {
         return clients[client].getIndexes(table, transaction);
     }
 
-    return Promise.reject(i18n.t('notices.data.utils.index.noSupportForDatabase', {client: client}));
+    return Promise.reject(common.i18n.t('notices.data.utils.index.noSupportForDatabase', {client: client}));
 }
 
 function getColumns(table, transaction) {
@@ -120,7 +120,7 @@ function getColumns(table, transaction) {
         return clients[client].getColumns(table);
     }
 
-    return Promise.reject(i18n.t('notices.data.utils.index.noSupportForDatabase', {client: client}));
+    return Promise.reject(common.i18n.t('notices.data.utils.index.noSupportForDatabase', {client: client}));
 }
 
 function checkTables(transaction) {

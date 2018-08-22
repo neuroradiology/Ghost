@@ -1,6 +1,7 @@
-var hbs = require('../themes/engine'),
+var hbs = require('../services/themes/engine'),
     Promise = require('bluebird'),
-    errors = require('../errors');
+    config = require('../config'),
+    proxy = require('./proxy');
 
 // Register an async handlebars helper for a given handlebars instance
 function asyncHelperWrapper(hbs, name, fn) {
@@ -12,13 +13,21 @@ function asyncHelperWrapper(hbs, name, fn) {
         }
 
         // Wrap the function passed in with a when.resolve so it can return either a promise or a value
-        Promise.resolve(fn.call(this, context, options)).then(function (result) {
+        Promise.resolve(fn.call(this, context, options)).then(function asyncHelperSuccess(result) {
             cb(result);
-        }).catch(function (err) {
-            throw new errors.IncorrectUsageError({
-                err: err,
-                context: 'registerAsyncThemeHelper: ' + name
-            });
+        }).catch(function asyncHelperError(err) {
+            var wrappedErr = err instanceof proxy.errors.GhostError ? err : new proxy.errors.IncorrectUsageError({
+                    err: err,
+                    context: 'registerAsyncThemeHelper: ' + name,
+                    errorDetails: {
+                        originalError: err
+                    }
+                }),
+                result = config.get('env') === 'development' ? wrappedErr : '';
+
+            proxy.logging.error(wrappedErr);
+
+            cb(new hbs.SafeString(result));
         });
     });
 }

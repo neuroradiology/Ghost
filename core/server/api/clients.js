@@ -1,20 +1,19 @@
 // # Client API
 // RESTful API for the Client resource
-var Promise      = require('bluebird'),
-    _            = require('lodash'),
-    dataProvider = require('../models'),
-    errors       = require('../errors'),
-    utils        = require('./utils'),
-    pipeline     = require('../utils/pipeline'),
-    i18n         = require('../i18n'),
+const Promise = require('bluebird'),
+    {extend, omit} = require('lodash'),
+    pipeline = require('../lib/promise/pipeline'),
+    localUtils = require('./utils'),
+    models = require('../models'),
+    common = require('../lib/common'),
+    docName = 'clients';
 
-    docName      = 'clients',
-    clients;
+let clients;
 
 /**
  * ### Clients API Methods
  *
- * **See:** [API Methods](index.js.html#api%20methods)
+ * **See:** [API Methods](events.js.html#api%20methods)
  */
 clients = {
 
@@ -24,8 +23,8 @@ clients = {
      * @return {Promise<Client>} Client
      */
     read: function read(options) {
-        var attrs = ['id', 'slug'],
-            tasks;
+        const attrs = ['id', 'slug'];
+        let tasks;
 
         /**
          * ### Model Query
@@ -35,26 +34,33 @@ clients = {
          */
         function doQuery(options) {
             // only User Agent (type = `ua`) clients are available at the moment.
-            options.data = _.extend(options.data, {type: 'ua'});
-            return dataProvider.Client.findOne(options.data, _.omit(options, ['data']));
+            options.data = extend(options.data, {type: 'ua'});
+
+            return models.Client.findOne(options.data, omit(options, ['data']))
+                .then(function onModelResponse(model) {
+                    if (!model) {
+                        return Promise.reject(new common.errors.NotFoundError({
+                            message: common.i18n.t('common.api.clients.clientNotFound')
+                        }));
+                    }
+
+                    return {
+                        clients: [model.toJSON(options)]
+                    };
+                });
         }
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName, {attrs: attrs}),
+            localUtils.validate(docName, {attrs: attrs}),
+            localUtils.convertOptions(),
             // TODO: add permissions
             // utils.handlePublicPermissions(docName, 'read'),
             doQuery
         ];
 
         // Pipeline calls each task passing the result of one to be the arguments for the next
-        return pipeline(tasks, options).then(function formatResponse(result) {
-            if (result) {
-                return {clients: [result.toJSON(options)]};
-            }
-
-            return Promise.reject(new errors.NotFoundError({message: i18n.t('common.api.clients.clientNotFound')}));
-        });
+        return pipeline(tasks, options);
     }
 };
 

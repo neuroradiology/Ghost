@@ -1,12 +1,14 @@
 // # Fixture Utils
 // Standalone file which can be required to help with advanced operations on the fixtures.json file
-var _            = require('lodash'),
-    Promise      = require('bluebird'),
-    models       = require('../../../models'),
-    baseUtils    = require('../../../models/base/utils'),
-    sequence     = require('../../../utils/sequence'),
+var _ = require('lodash'),
+    Promise = require('bluebird'),
+    common = require('../../../lib/common'),
+    models = require('../../../models'),
+    baseUtils = require('../../../models/base/utils'),
+    sequence = require('../../../lib/promise/sequence'),
+    moment = require('moment'),
 
-    fixtures     = require('./fixtures'),
+    fixtures = require('./fixtures'),
 
     // Private
     matchFunc,
@@ -17,6 +19,8 @@ var _            = require('lodash'),
 
     addFixturesForModel,
     addFixturesForRelation,
+    removeFixturesForModel,
+
     findModelFixtureEntry,
     findModelFixtures,
     findPermissionRelationsForObject;
@@ -94,10 +98,39 @@ fetchRelationData = function fetchRelationData(relation, options) {
  * @param {{name, entries}} modelFixture
  * @returns {Promise.<*>}
  */
-addFixturesForModel = function addFixturesForModel(modelFixture, options) {
+addFixturesForModel = function addFixturesForModel(modelFixture, options = {}) {
+    // Clone the fixtures as they get changed in this function.
+    // The initial blog posts will be added a `published_at` property, which
+    // would change the fixturesHash.
+    modelFixture = _.cloneDeep(modelFixture);
+    // The Post model fixtures need a `published_at` date, where at least the seconds
+    // are different, otherwise `prev_post` and `next_post` helpers won't workd with
+    // them.
+    if (modelFixture.name === 'Post') {
+        _.forEach(modelFixture.entries, function (post, index) {
+            if (!post.published_at) {
+                post.published_at = moment().add(index, 'seconds');
+            }
+        });
+    }
+
     return Promise.mapSeries(modelFixture.entries, function (entry) {
+        let data = {};
+
         // CASE: if id is specified, only query by id
-        return models[modelFixture.name].findOne(entry.id ? {id: entry.id} : entry, options).then(function (found) {
+        if (entry.id) {
+            data.id = entry.id;
+        } else if (entry.slug) {
+            data.slug = entry.slug;
+        } else {
+            data = _.cloneDeep(entry);
+        }
+
+        if (modelFixture.name === 'Post') {
+            data.status = 'all';
+        }
+
+        return models[modelFixture.name].findOne(data, options).then(function (found) {
             if (!found) {
                 return models[modelFixture.name].add(entry, options);
             }
@@ -121,6 +154,14 @@ addFixturesForRelation = function addFixturesForRelation(relationFixture, option
     return fetchRelationData(relationFixture, options).then(function getRelationOps(data) {
         _.each(relationFixture.entries, function processEntries(entry, key) {
             var fromItem = data.from.find(matchFunc(relationFixture.from.match, key));
+
+            // CASE: You add new fixtures e.g. a new role in a new release.
+            // As soon as an **older** migration script wants to add permissions for any resource, it iterates over the
+            // permissions for each role. But if the role does not exist yet, it won't find the matching db entry and breaks.
+            if (!fromItem) {
+                common.logging.warn('Skip: Target database entry not found for key: ' + key);
+                return Promise.resolve();
+            }
 
             _.each(entry, function processEntryValues(value, key) {
                 var toItems = data.to.filter(matchFunc(relationFixture.to.match, key, value));
@@ -229,10 +270,24 @@ findPermissionRelationsForObject = function findPermissionRelationsForObject(obj
     return foundRelation;
 };
 
+removeFixturesForModel = function removeFixturesForModel(modelFixture, options) {
+    return Promise.mapSeries(modelFixture.entries, function (entry) {
+        return models[modelFixture.name].findOne(entry.id ? {id: entry.id} : entry, options).then(function (found) {
+            if (found) {
+                return models[modelFixture.name].destroy(_.extend(options, {id: found.id}));
+            }
+        });
+    }).then(function (results) {
+        return {expected: modelFixture.entries.length, done: results.length};
+    });
+};
+
 module.exports = {
     addFixturesForModel: addFixturesForModel,
     addFixturesForRelation: addFixturesForRelation,
     findModelFixtureEntry: findModelFixtureEntry,
     findModelFixtures: findModelFixtures,
-    findPermissionRelationsForObject: findPermissionRelationsForObject
+    findRelationFixture: findRelationFixture,
+    findPermissionRelationsForObject: findPermissionRelationsForObject,
+    removeFixturesForModel: removeFixturesForModel
 };

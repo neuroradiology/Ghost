@@ -5,7 +5,7 @@ var should = require('should'),
     testUtils = require('../../../utils'),
     moment = require('moment'),
     path = require('path'),
-    errors = require('../../../../server/errors'),
+    common = require('../../../../server/lib/common'),
 
     // Stuff we are testing
     ImportManager = require('../../../../server/data/importer'),
@@ -172,13 +172,13 @@ describe('Importer', function () {
                 it('fails a zip with two base directories', function () {
                     var testDir = path.resolve('core/test/utils/fixtures/import/zips/zip-with-double-base-dir');
 
-                    ImportManager.isValidZip.bind(ImportManager, testDir).should.throw(errors.UnsupportedMediaTypeError);
+                    ImportManager.isValidZip.bind(ImportManager, testDir).should.throw(common.errors.UnsupportedMediaTypeError);
                 });
 
                 it('fails a zip with no content', function () {
                     var testDir = path.resolve('core/test/utils/fixtures/import/zips/zip-invalid');
 
-                    ImportManager.isValidZip.bind(ImportManager, testDir).should.throw(errors.UnsupportedMediaTypeError);
+                    ImportManager.isValidZip.bind(ImportManager, testDir).should.throw(common.errors.UnsupportedMediaTypeError);
                 });
 
                 it('shows a special error for old Roon exports', function () {
@@ -186,7 +186,7 @@ describe('Importer', function () {
                         msg = 'Your zip file looks like an old format Roon export, ' +
                             'please re-export your Roon blog and try again.';
 
-                    ImportManager.isValidZip.bind(ImportManager, testDir).should.throw(errors.UnsupportedMediaTypeError);
+                    ImportManager.isValidZip.bind(ImportManager, testDir).should.throw(common.errors.UnsupportedMediaTypeError);
                     ImportManager.isValidZip.bind(ImportManager, testDir).should.throw(msg);
                 });
             });
@@ -239,10 +239,10 @@ describe('Importer', function () {
                 var input = {data: {posts: []}, images: []},
                     // pass a copy so that input doesn't get modified
                     inputCopy = _.cloneDeep(input),
-                    dataSpy = sandbox.stub(DataImporter, 'doImport', function (i) {
+                    dataSpy = sandbox.stub(DataImporter, 'doImport').callsFake(function (i) {
                         return Promise.resolve(i);
                     }),
-                    imageSpy = sandbox.stub(ImageImporter, 'doImport', function (i) {
+                    imageSpy = sandbox.stub(ImageImporter, 'doImport').callsFake(function (i) {
                         return Promise.resolve(i);
                     }),
 
@@ -313,8 +313,8 @@ describe('Importer', function () {
 
         it('correctly handles a valid db api wrapper', function (done) {
             var file = [{
-                path: testUtils.fixtures.getExportFixturePath('export-003-api-wrapper', {lts: true}),
-                name: 'export-003-api-wrapper.json'
+                path: testUtils.fixtures.getExportFixturePath('valid'),
+                name: 'valid.json'
             }];
             JSONHandler.loadFile(file).then(function (result) {
                 _.keys(result).should.containEql('meta');
@@ -325,8 +325,8 @@ describe('Importer', function () {
 
         it('correctly errors when given a bad db api wrapper', function (done) {
             var file = [{
-                path: testUtils.fixtures.getExportFixturePath('export-003-api-wrapper-bad', {lts: true}),
-                name: 'export-003-api-wrapper-bad.json'
+                path: testUtils.fixtures.getExportFixturePath('broken'),
+                name: 'broken.json'
             }];
 
             JSONHandler.loadFile(file).then(function () {
@@ -686,7 +686,7 @@ describe('Importer', function () {
                 storageApi = {
                     save: sandbox.stub().returns(Promise.resolve())
                 },
-                storageSpy = sandbox.stub(storage, 'getStorage', function () {
+                storageSpy = sandbox.stub(storage, 'getStorage').callsFake(function () {
                     return storageApi;
                 });
 

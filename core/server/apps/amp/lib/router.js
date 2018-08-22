@@ -1,84 +1,87 @@
-var path                = require('path'),
-    express             = require('express'),
-    _                   = require('lodash'),
-    ampRouter           = express.Router(),
-    i18n                = require('../../../i18n'),
+const path = require('path'),
+    express = require('express'),
+    ampRouter = express.Router(),
 
     // Dirty requires
-    errors              = require('../../../errors'),
-    settingsCache       = require('../../../settings/cache'),
-    templates           = require('../../../controllers/frontend/templates'),
-    postLookup          = require('../../../controllers/frontend/post-lookup'),
-    setResponseContext  = require('../../../controllers/frontend/context');
+    common = require('../../../lib/common'),
+    urlService = require('../../../services/url'),
+    helpers = require('../../../services/routing/helpers'),
+    templateName = 'amp';
 
-function controller(req, res, next) {
-    var templateName = 'amp',
-        defaultTemplate = path.resolve(__dirname, 'views', templateName + '.hbs'),
-        data = req.body || {};
+function _renderer(req, res, next) {
+    res.routerOptions = {
+        type: 'custom',
+        templates: templateName,
+        defaultTemplate: path.resolve(__dirname, 'views', `${templateName}.hbs`)
+    };
 
-    if (res.error) {
-        data.error = res.error;
+    // Renderer begin
+    // Format data
+    let data = req.body || {};
+
+    // CASE: we only support amp pages for posts that are not static pages
+    if (!data.post || data.post.page) {
+        return next(new common.errors.NotFoundError({message: common.i18n.t('errors.errors.pageNotFound')}));
     }
 
-    setResponseContext(req, res, data);
-
-    // we have to check the context. Our context must be ['post', 'amp'], otherwise we won't render the template
-    if (_.includes(res.locals.context, 'post') && _.includes(res.locals.context, 'amp')) {
-        return res.render(templates.pickTemplate(templateName, defaultTemplate), data);
-    }
-
-    return next();
+    // Render Call
+    return helpers.renderer(req, res, data);
 }
 
+// This here is a controller.
+// In fact, this whole file is nothing more than a controller + renderer & doesn't need to be a router
 function getPostData(req, res, next) {
     req.body = req.body || {};
 
-    postLookup(res.locals.relativeUrl)
-        .then(function (result) {
+    const urlWithoutSubdirectoryWithoutAmp = res.locals.relativeUrl.match(/(.*?\/)amp\/?$/)[1];
+
+    /**
+     * @NOTE
+     *
+     * We have to figure out the target permalink, otherwise it would be possible to serve a post
+     * which lives in two collections.
+     *
+     * @TODO:
+     *
+     * This is not optimal and caused by the fact how apps currently work. But apps weren't designed
+     * for dynamic routing.
+     *
+     * I think if the responsible, target router would first take care fetching/determining the post, the
+     * request could then be forwarded to this app. Then we don't have to:
+     *
+     * 1. care about fetching the post
+     * 2. care about if the post can be served
+     * 3. then this app would act like an extension
+     *
+     * The challenge is to design different types of apps e.g. extensions of routers, standalone pages etc.
+     */
+    const permalinks = urlService.getPermalinkByUrl(urlWithoutSubdirectoryWithoutAmp, {withUrlOptions: true});
+
+    if (!permalinks) {
+        return next(new common.errors.NotFoundError({
+            message: common.i18n.t('errors.errors.pageNotFound')
+        }));
+    }
+
+    helpers.postLookup(urlWithoutSubdirectoryWithoutAmp, {permalinks})
+        .then((result) => {
             if (result && result.post) {
                 req.body.post = result.post;
             }
 
             next();
         })
-        .catch(function (err) {
-            next(err);
-        });
-}
-
-function checkIfAMPIsEnabled(req, res, next) {
-    var ampIsEnabled = settingsCache.get('amp');
-
-    if (ampIsEnabled) {
-        return next();
-    }
-
-    // CASE: we don't support amp pages for static pages
-    if (req.body.post && req.body.post.page) {
-        return next(new errors.NotFoundError({message: i18n.t('errors.errors.pageNotFound')}));
-    }
-
-    /**
-     * CASE: amp is disabled, we serve 404
-     *
-     * Alternatively we could redirect to the original post, as the user can enable/disable AMP every time.
-     *
-     * If we would call `next()`, express jumps to the frontend controller (server/controllers/frontend/index.js fn single)
-     * and tries to lookup the post (again) and checks whether the post url equals the requested url (post.url !== req.path).
-     * This check would fail if the blog is setup on a subdirectory.
-     */
-    return next(new errors.NotFoundError({message: i18n.t('errors.errors.pageNotFound')}));
+        .catch(next);
 }
 
 // AMP frontend route
-ampRouter.route('/')
+ampRouter
+    .route('/')
     .get(
         getPostData,
-        checkIfAMPIsEnabled,
-        controller
+        _renderer
     );
 
 module.exports = ampRouter;
-module.exports.controller = controller;
+module.exports.renderer = _renderer;
 module.exports.getPostData = getPostData;
-module.exports.checkIfAMPIsEnabled = checkIfAMPIsEnabled;

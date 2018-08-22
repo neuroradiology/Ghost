@@ -35,8 +35,10 @@ CONTRIBUTING.md
 SECURITY.md
 .travis.yml
 *.html
-!core/server/admin/views/**
-!core/server/mail/templates/**
+!core/server/web/admin/views/**
+!core/server/services/mail/templates/**
 bower_components/**
 .editorconfig
 gulpfile.js
+!content/themes/casper/gulpfile.js
+package-lock.json

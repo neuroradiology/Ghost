@@ -1,21 +1,19 @@
 // # Tag API
 // RESTful API for the Tag resource
-var Promise      = require('bluebird'),
-    _            = require('lodash'),
-    dataProvider = require('../models'),
-    errors       = require('../errors'),
-    utils        = require('./utils'),
-    pipeline     = require('../utils/pipeline'),
-    i18n         = require('../i18n'),
-
-    docName      = 'tags',
+var Promise = require('bluebird'),
+    _ = require('lodash'),
+    pipeline = require('../lib/promise/pipeline'),
+    localUtils = require('./utils'),
+    models = require('../models'),
+    common = require('../lib/common'),
+    docName = 'tags',
     allowedIncludes = ['count.posts'],
     tags;
 
 /**
  * ### Tags API Methods
  *
- * **See:** [API Methods](index.js.html#api%20methods)
+ * **See:** [API Methods](constants.js.html#api%20methods)
  */
 tags = {
     /**
@@ -33,14 +31,14 @@ tags = {
          * @returns {Object} options
          */
         function doQuery(options) {
-            return dataProvider.Tag.findPage(options);
+            return models.Tag.findPage(options);
         }
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName, {opts: utils.browseDefaultOptions}),
-            utils.handlePublicPermissions(docName, 'browse'),
-            utils.convertOptions(allowedIncludes),
+            localUtils.validate(docName, {opts: localUtils.browseDefaultOptions}),
+            localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePublicPermissions(docName, 'browse'),
             doQuery
         ];
 
@@ -64,25 +62,30 @@ tags = {
          * @returns {Object} options
          */
         function doQuery(options) {
-            return dataProvider.Tag.findOne(options.data, _.omit(options, ['data']));
+            return models.Tag.findOne(options.data, _.omit(options, ['data']))
+                .then(function onModelResponse(model) {
+                    if (!model) {
+                        return Promise.reject(new common.errors.NotFoundError({
+                            message: common.i18n.t('errors.api.tags.tagNotFound')
+                        }));
+                    }
+
+                    return {
+                        tags: [model.toJSON(options)]
+                    };
+                });
         }
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName, {attrs: attrs}),
-            utils.handlePublicPermissions(docName, 'read'),
-            utils.convertOptions(allowedIncludes),
+            localUtils.validate(docName, {attrs: attrs}),
+            localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePublicPermissions(docName, 'read'),
             doQuery
         ];
 
         // Pipeline calls each task passing the result of one to be the arguments for the next
-        return pipeline(tasks, options).then(function formatResponse(result) {
-            if (result) {
-                return {tags: [result.toJSON(options)]};
-            }
-
-            return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.api.tags.tagNotFound')}));
-        });
+        return pipeline(tasks, options);
     },
 
     /**
@@ -100,23 +103,24 @@ tags = {
          * @returns {Object} options
          */
         function doQuery(options) {
-            return dataProvider.Tag.add(options.data.tags[0], _.omit(options, ['data']));
+            return models.Tag.add(options.data.tags[0], _.omit(options, ['data']))
+                .then(function onModelResponse(model) {
+                    return {
+                        tags: [model.toJSON(options)]
+                    };
+                });
         }
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName),
-            utils.handlePermissions(docName, 'add'),
-            utils.convertOptions(allowedIncludes),
+            localUtils.validate(docName),
+            localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePermissions(docName, 'add'),
             doQuery
         ];
 
         // Pipeline calls each task passing the result of one to be the arguments for the next
-        return pipeline(tasks, object, options).then(function formatResponse(result) {
-            var tag = result.toJSON(options);
-
-            return {tags: [tag]};
-        });
+        return pipeline(tasks, object, options);
     },
 
     /**
@@ -136,27 +140,30 @@ tags = {
          * @returns {Object} options
          */
         function doQuery(options) {
-            return dataProvider.Tag.edit(options.data.tags[0], _.omit(options, ['data']));
+            return models.Tag.edit(options.data.tags[0], _.omit(options, ['data']))
+                .then(function onModelResponse(model) {
+                    if (!model) {
+                        return Promise.reject(new common.errors.NotFoundError({
+                            message: common.i18n.t('errors.api.tags.tagNotFound')
+                        }));
+                    }
+
+                    return {
+                        tags: [model.toJSON(options)]
+                    };
+                });
         }
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName, {opts: utils.idDefaultOptions}),
-            utils.handlePermissions(docName, 'edit'),
-            utils.convertOptions(allowedIncludes),
+            localUtils.validate(docName, {opts: localUtils.idDefaultOptions}),
+            localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePermissions(docName, 'edit'),
             doQuery
         ];
 
         // Pipeline calls each task passing the result of one to be the arguments for the next
-        return pipeline(tasks, object, options).then(function formatResponse(result) {
-            if (result) {
-                var tag = result.toJSON(options);
-
-                return {tags: [tag]};
-            }
-
-            return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.api.tags.tagNotFound')}));
-        });
+        return pipeline(tasks, object, options);
     },
 
     /**
@@ -175,14 +182,14 @@ tags = {
          * @param {Object} options
          */
         function deleteTag(options) {
-            return dataProvider.Tag.destroy(options).return(null);
+            return models.Tag.destroy(options).return(null);
         }
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
-            utils.validate(docName, {opts: utils.idDefaultOptions}),
-            utils.handlePermissions(docName, 'destroy'),
-            utils.convertOptions(allowedIncludes),
+            localUtils.validate(docName, {opts: localUtils.idDefaultOptions}),
+            localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePermissions(docName, 'destroy'),
             deleteTag
         ];
 

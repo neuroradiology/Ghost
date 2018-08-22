@@ -5,11 +5,10 @@ var should = require('should'),
     _ = require('lodash'),
 
     // Stuff we are testing
-    errors = require('../../../server/errors'),
-    gravatar = require('../../../server/utils/gravatar'),
+    common = require('../../../server/lib/common'),
+    imageLib = require('../../../server/lib/image'),
     UserModel = require('../../../server/models/user').User,
     RoleModel = require('../../../server/models/role').Role,
-    events = require('../../../server/events'),
     context = testUtils.context.admin,
     sandbox = sinon.sandbox.create();
 
@@ -90,7 +89,7 @@ describe('User Model', function run() {
         it('can find gravatar', function (done) {
             var userData = testUtils.DataGenerator.forModel.users[4];
 
-            sandbox.stub(gravatar, 'lookup', function (userData) {
+            sandbox.stub(imageLib.gravatar, 'lookup').callsFake(function (userData) {
                 userData.image = 'http://www.gravatar.com/avatar/2fab21a4c4ed88e76add10650c73bae1?d=404';
                 return Promise.resolve(userData);
             });
@@ -107,7 +106,7 @@ describe('User Model', function run() {
         it('can handle no gravatar', function (done) {
             var userData = testUtils.DataGenerator.forModel.users[0];
 
-            sandbox.stub(gravatar, 'lookup', function (userData) {
+            sandbox.stub(imageLib.gravatar, 'lookup').callsFake(function (userData) {
                 return Promise.resolve(userData);
             });
 
@@ -116,20 +115,6 @@ describe('User Model', function run() {
                 should.not.exist(createdUser.image);
                 done();
             }).catch(done);
-        });
-
-        it('can set password of only numbers', function () {
-            var userData = testUtils.DataGenerator.forModel.users[0];
-
-            // avoid side-effects!
-            userData = _.cloneDeep(userData);
-            userData.password = 12345678;
-
-            // mocha supports promises
-            return UserModel.add(userData, context).then(function (createdUser) {
-                should.exist(createdUser);
-                // cannot validate password
-            });
         });
 
         it('can find by email and is case insensitive', function (done) {
@@ -171,7 +156,7 @@ describe('User Model', function run() {
 
         beforeEach(function () {
             eventsTriggered = {};
-            sandbox.stub(events, 'emit', function (eventName, eventObj) {
+            sandbox.stub(common.events, 'emit').callsFake(function (eventName, eventObj) {
                 if (!eventsTriggered[eventName]) {
                     eventsTriggered[eventName] = [];
                 }
@@ -216,7 +201,7 @@ describe('User Model', function run() {
         it('can findAll', function (done) {
             UserModel.findAll().then(function (results) {
                 should.exist(results);
-                results.length.should.equal(4);
+                results.length.should.equal(5);
 
                 done();
             }).catch(done);
@@ -229,7 +214,7 @@ describe('User Model', function run() {
                 results.meta.pagination.page.should.equal(1);
                 results.meta.pagination.limit.should.equal(15);
                 results.meta.pagination.pages.should.equal(1);
-                results.users.length.should.equal(4);
+                results.users.length.should.equal(5);
 
                 done();
             }).catch(done);
@@ -275,7 +260,7 @@ describe('User Model', function run() {
                 results.meta.pagination.page.should.equal(1);
                 results.meta.pagination.limit.should.equal('all');
                 results.meta.pagination.pages.should.equal(1);
-                results.users.length.should.equal(7);
+                results.users.length.should.equal(9);
             });
         });
 
@@ -349,7 +334,7 @@ describe('User Model', function run() {
             RoleModel.findOne().then(function (role) {
                 userData.roles = [role.toJSON()];
 
-                return UserModel.add(userData, _.extend({}, context, {include: ['roles']}));
+                return UserModel.add(userData, _.extend({}, context, {withRelated: ['roles']}));
             }).then(function (createdUser) {
                 should.exist(createdUser);
                 createdUser.get('password').should.not.equal(userData.password, 'password was hashed');
@@ -372,7 +357,7 @@ describe('User Model', function run() {
             RoleModel.findOne().then(function (role) {
                 userData.roles = [role.toJSON()];
 
-                return UserModel.add(userData, _.extend({}, context, {include: ['roles']}));
+                return UserModel.add(userData, _.extend({}, context, {withRelated: ['roles']}));
             }).then(function () {
                 done(new Error('User was created with an invalid email address'));
             }).catch(function () {
@@ -424,7 +409,7 @@ describe('User Model', function run() {
                     done(new Error('Already existing email address was accepted'));
                 })
                 .catch(function (err) {
-                    (err instanceof errors.ValidationError).should.eql(true);
+                    (err instanceof common.errors.ValidationError).should.eql(true);
                     done();
                 });
         });
@@ -549,28 +534,112 @@ describe('User Model', function run() {
         describe('error', function () {
             it('wrong old password', function (done) {
                 UserModel.changePassword({
-                    newPassword: '12345678',
-                    ne2Password: '12345678',
+                    newPassword: '1234567890',
+                    ne2Password: '1234567890',
                     oldPassword: '123456789',
                     user_id: testUtils.DataGenerator.Content.users[0].id
                 }, testUtils.context.owner).then(function () {
                     done(new Error('expected error!'));
                 }).catch(function (err) {
-                    (err instanceof errors.ValidationError).should.eql(true);
+                    (err instanceof common.errors.ValidationError).should.eql(true);
                     done();
                 });
             });
 
-            it('wrong old password', function (done) {
+            it('too short password', function (done) {
                 UserModel.changePassword({
                     newPassword: '12345678',
                     ne2Password: '12345678',
-                    oldPassword: '123456789',
+                    oldPassword: 'Sl1m3rson99',
                     user_id: testUtils.DataGenerator.Content.users[0].id
                 }, testUtils.context.owner).then(function () {
                     done(new Error('expected error!'));
                 }).catch(function (err) {
-                    (err instanceof errors.ValidationError).should.eql(true);
+                    (err instanceof common.errors.ValidationError).should.eql(true);
+                    done();
+                });
+            });
+
+            it('very bad password', function (done) {
+                UserModel.changePassword({
+                    newPassword: '1234567890',
+                    ne2Password: '1234567890',
+                    oldPassword: 'Sl1m3rson99',
+                    user_id: testUtils.DataGenerator.Content.users[0].id
+                }, testUtils.context.owner).then(function () {
+                    done(new Error('expected error!'));
+                }).catch(function (err) {
+                    (err instanceof common.errors.ValidationError).should.eql(true);
+                    done();
+                });
+            });
+
+            it('password matches users email adress', function (done) {
+                UserModel.changePassword({
+                    newPassword: 'jbloggs@example.com',
+                    ne2Password: 'jbloggs@example.com',
+                    oldPassword: 'Sl1m3rson99',
+                    user_id: testUtils.DataGenerator.Content.users[0].id
+                }, testUtils.context.owner).then(function () {
+                    done(new Error('expected error!'));
+                }).catch(function (err) {
+                    (err instanceof common.errors.ValidationError).should.eql(true);
+                    done();
+                });
+            });
+
+            it('password contains words "ghost" or "password"', function (done) {
+                UserModel.changePassword({
+                    newPassword: 'onepassword',
+                    ne2Password: 'onepassword',
+                    oldPassword: 'Sl1m3rson99',
+                    user_id: testUtils.DataGenerator.Content.users[0].id
+                }, testUtils.context.owner).then(function () {
+                    done(new Error('expected error!'));
+                }).catch(function (err) {
+                    (err instanceof common.errors.ValidationError).should.eql(true);
+                    done();
+                });
+            });
+
+            it('password matches blog URL', function (done) {
+                UserModel.changePassword({
+                    newPassword: '127.0.0.1:2369',
+                    ne2Password: '127.0.0.1:2369',
+                    oldPassword: 'Sl1m3rson99',
+                    user_id: testUtils.DataGenerator.Content.users[0].id
+                }, testUtils.context.owner).then(function () {
+                    done(new Error('expected error!'));
+                }).catch(function (err) {
+                    (err instanceof common.errors.ValidationError).should.eql(true);
+                    done();
+                });
+            });
+
+            it('password contains repeating chars', function (done) {
+                UserModel.changePassword({
+                    newPassword: 'cdcdcdcdcd',
+                    ne2Password: 'cdcdcdcdcd',
+                    oldPassword: 'Sl1m3rson99',
+                    user_id: testUtils.DataGenerator.Content.users[0].id
+                }, testUtils.context.owner).then(function () {
+                    done(new Error('expected error!'));
+                }).catch(function (err) {
+                    (err instanceof common.errors.ValidationError).should.eql(true);
+                    done();
+                });
+            });
+
+            it('password contains repeating numbers', function (done) {
+                UserModel.changePassword({
+                    newPassword: '1231111111',
+                    ne2Password: '1231111111',
+                    oldPassword: 'Sl1m3rson99',
+                    user_id: testUtils.DataGenerator.Content.users[0].id
+                }, testUtils.context.owner).then(function () {
+                    done(new Error('expected error!'));
+                }).catch(function (err) {
+                    (err instanceof common.errors.ValidationError).should.eql(true);
                     done();
                 });
             });
@@ -579,12 +648,12 @@ describe('User Model', function run() {
         describe('success', function () {
             it('can change password', function (done) {
                 UserModel.changePassword({
-                    newPassword: '12345678',
-                    ne2Password: '12345678',
-                    oldPassword: 'Sl1m3rson',
+                    newPassword: 'thisissupersafe',
+                    ne2Password: 'thisissupersafe',
+                    oldPassword: 'Sl1m3rson99',
                     user_id: testUtils.DataGenerator.Content.users[0].id
                 }, testUtils.context.owner).then(function (user) {
-                    user.get('password').should.not.eql('12345678');
+                    user.get('password').should.not.eql('thisissupersafe');
                     done();
                 }).catch(done);
             });
@@ -598,7 +667,7 @@ describe('User Model', function run() {
             var userData = {
                 name: 'Max Mustermann',
                 email: 'test@ghost.org',
-                password: '12345678'
+                password: 'thisissupersafe'
             };
 
             UserModel.setup(userData, {id: 1})

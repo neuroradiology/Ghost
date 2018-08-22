@@ -1,39 +1,35 @@
-
 // Usage:
-// `{{img_url}}` - does not work, argument is required
 // `{{img_url feature_image}}`
 // `{{img_url profile_image absolute="true"}}`
+// Note:
+// `{{img_url}}` - does not work, argument is required
 //
 // Returns the URL for the current object scope i.e. If inside a post scope will return image permalink
 // `absolute` flag outputs absolute URL, else URL is relative.
 
 var proxy = require('./proxy'),
-    errors = require('../errors'),
-    i18n = require('../i18n'),
-    url = proxy.url;
+    urlService = proxy.urlService;
 
 module.exports = function imgUrl(attr, options) {
-    var absolute;
-
-    // CASE: if you pass e.g. cover_image, but it is not set, then attr is null!
-    //       in this case we don't throw an error
-    if (!options) {
-        attr = undefined;
-        options = attr;
-    }
-
-    absolute = options && options.hash && options.hash.absolute;
-
-    if (attr === undefined) {
-        throw new errors.IncorrectUsageError({
-            message: i18n.t('warnings.helpers.img_url.attrIsRequired')
-        });
-    }
-
-    // CASE: property is not set in the model e.g. cover_image
-    if (attr === null) {
+    // CASE: if no attribute is passed, e.g. `{{img_url}}` we show a warning
+    if (arguments.length < 2) {
+        proxy.logging.warn(proxy.i18n.t('warnings.helpers.img_url.attrIsRequired'));
         return;
     }
 
-    return url.urlFor('image', {image: attr}, absolute);
+    var absolute = options && options.hash && options.hash.absolute;
+
+    // CASE: if attribute is passed, but it is undefined, then the attribute was
+    // an unknown value, e.g. {{img_url feature_img}} and we also show a warning
+    if (attr === undefined) {
+        proxy.logging.warn(proxy.i18n.t('warnings.helpers.img_url.attrIsRequired'));
+        return;
+    }
+
+    if (attr) {
+        return urlService.utils.urlFor('image', {image: attr}, absolute);
+    }
+
+    // CASE: if you pass e.g. cover_image, but it is not set, then attr is null!
+    // in this case we don't show a warning
 };

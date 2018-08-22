@@ -8,12 +8,12 @@
 // By default supported AMP HTML tags (no additional script tag necessary):
 // amp-img, amp-ad, amp-embed, amp-video and amp-pixel.
 // (less) dirty requires
-var proxy = require('../../../../helpers/proxy'),
+const proxy = require('../../../../helpers/proxy'),
     SafeString = proxy.SafeString;
 
 function ampComponents() {
-    var components = [],
-        html = this.post.html || this.html;
+    let components = [],
+        html = this.post && this.post.html || this.html;
 
     if (!html) {
         return;

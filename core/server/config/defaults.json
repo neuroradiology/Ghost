@@ -4,6 +4,10 @@
         "host": "127.0.0.1",
         "port": 2368
     },
+    "updateCheck": {
+        "url": "https://updates.ghost.org",
+        "forceUpdate": false
+    },
     "privacy": false,
     "useMinFiles": true,
     "paths": {
@@ -18,7 +22,9 @@
     "logging": {
         "level": "info",
         "rotation": {
-            "enabled": false
+            "enabled": false,
+            "period": "1d",
+            "count": 10
         },
         "transports": ["stdout"]
     },

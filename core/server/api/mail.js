@@ -1,15 +1,14 @@
 // # Mail API
 // API for sending Mail
 
-var Promise       = require('bluebird'),
-    pipeline      = require('../utils/pipeline'),
-    errors        = require('../errors'),
-    mail          = require('../mail'),
-    Models        = require('../models'),
-    utils         = require('./utils'),
-    notifications = require('./notifications'),
-    i18n          = require('../i18n'),
-    docName       = 'mail',
+var Promise = require('bluebird'),
+    pipeline = require('../lib/promise/pipeline'),
+    localUtils = require('./utils'),
+    models = require('../models'),
+    common = require('../lib/common'),
+    mail = require('../services/mail'),
+    notificationsAPI = require('./notifications'),
+    docName = 'mail',
     mailer,
     apiMail;
 
@@ -23,27 +22,28 @@ function sendMail(object) {
 
     return mailer.send(object.mail[0].message).catch(function (err) {
         if (mailer.state.usingDirect) {
-            notifications.add(
-                {notifications: [{
-                    type: 'warn',
-                    message: [
-                        i18n.t('warnings.index.unableToSendEmail'),
-                        i18n.t('common.seeLinkForInstructions',
-                            {link: '<a href=\'https://docs.ghost.org/v1.0.0/docs/mail-config\' target=\'_blank\'>Checkout our mail configuration docs!</a>'})
-                    ].join(' ')
-                }]},
+            notificationsAPI.add(
+                {
+                    notifications: [{
+                        type: 'warn',
+                        message: [
+                            common.i18n.t('warnings.index.unableToSendEmail'),
+                            common.i18n.t('common.seeLinkForInstructions', {link: 'https://docs.ghost.org/docs/mail-config'})
+                        ].join(' ')
+                    }]
+                },
                 {context: {internal: true}}
             );
         }
 
-        return Promise.reject(new errors.EmailError({err: err}));
+        return Promise.reject(err);
     });
 }
 
 /**
  * ## Mail API Methods
  *
- * **See:** [API Methods](index.js.html#api%20methods)
+ * **See:** [API Methods](constants.js.html#api%20methods)
  * @typedef Mail
  * @param mail
  */
@@ -84,7 +84,7 @@ apiMail = {
         }
 
         tasks = [
-            utils.handlePermissions(docName, 'send'),
+            localUtils.handlePermissions(docName, 'send'),
             send,
             formatResponse
         ];
@@ -108,7 +108,7 @@ apiMail = {
          */
 
         function modelQuery() {
-            return Models.User.findOne({id: options.context.user});
+            return models.User.findOne({id: options.context.user});
         }
 
         /**
@@ -121,7 +121,7 @@ apiMail = {
                     mail: [{
                         message: {
                             to: result.get('email'),
-                            subject: i18n.t('common.api.mail.testGhostEmail'),
+                            subject: common.i18n.t('common.api.mail.testGhostEmail'),
                             html: content.html,
                             text: content.text
                         }

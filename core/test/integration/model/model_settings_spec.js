@@ -1,11 +1,12 @@
 var should = require('should'),
+    _ = require('lodash'),
     sinon = require('sinon'),
     testUtils = require('../../utils'),
 
     // Stuff we are testing
     SettingsModel = require('../../../server/models/settings').Settings,
     db = require('../../../server/data/db'),
-    events = require('../../../server/events'),
+    common = require('../../../server/lib/common'),
     context = testUtils.context.admin,
     sandbox = sinon.sandbox.create();
 
@@ -26,7 +27,7 @@ describe('Settings Model', function () {
     });
 
     beforeEach(function () {
-        eventSpy = sandbox.spy(events, 'emit');
+        eventSpy = sandbox.spy(common.events, 'emit');
     });
 
     describe('API', function () {
@@ -35,6 +36,7 @@ describe('Settings Model', function () {
                 should.exist(results);
 
                 results.length.should.be.above(0);
+                should.exist(_.find(results.models, {attributes: {key : 'permalinks'}}));
 
                 done();
             }).catch(done);

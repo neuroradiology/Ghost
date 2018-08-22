@@ -1,11 +1,11 @@
 var should = require('should'),
     sinon = require('sinon'),
-    testUtils = require('../utils/index'),
+    testUtils = require('../utils'),
     _ = require('lodash'),
 
     // Stuff we are testing
-    exporter = require('../../server/data/export'),
-    utils = require('../../server/utils'),
+    exporter = require('../../server/data/exporter'),
+    ghostVersion = require('../../server/lib/ghost-version'),
 
     sandbox = sinon.sandbox.create();
 
@@ -29,11 +29,13 @@ describe('Exporter', function () {
             should.exist(exportData.meta);
             should.exist(exportData.data);
 
-            exportData.meta.version.should.equal(utils.ghostVersion.full);
+            exportData.meta.version.should.equal(ghostVersion.full);
 
             _.each(tables, function (name) {
                 should.exist(exportData.data[name]);
             });
+
+            should.not.exist(_.find(exportData.data.settings, {key: 'permalinks'}));
 
             // should not export sqlite data
             should.not.exist(exportData.data.sqlite_sequence);

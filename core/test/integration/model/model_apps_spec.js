@@ -1,6 +1,6 @@
 var should = require('should'),
     testUtils = require('../../utils'),
-    sequence = require('../../../server/utils/sequence'),
+    sequence = require('../../../server/lib/promise/sequence'),
     _ = require('lodash'),
 
     // Stuff we are testing
@@ -10,8 +10,8 @@ var should = require('should'),
 describe('App Model', function () {
     // Keep the DB clean
     before(testUtils.teardown);
-    afterEach(testUtils.teardown);
-    beforeEach(testUtils.setup('app'));
+    after(testUtils.teardown);
+    before(testUtils.setup('app'));
 
     before(function () {
         should.exist(AppModel);

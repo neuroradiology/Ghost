@@ -4,37 +4,41 @@
 // Ghost's JSON API is integral to the workings of Ghost, regardless of whether you want to access data internally,
 // from a theme, an app, or from an external app, you'll use the Ghost JSON API to do so.
 
-var _              = require('lodash'),
-    Promise        = require('bluebird'),
-    config         = require('../config'),
-    models         = require('../models'),
-    utils          = require('../utils'),
-    configuration  = require('./configuration'),
-    db             = require('./db'),
-    mail           = require('./mail'),
-    notifications  = require('./notifications'),
-    posts          = require('./posts'),
-    schedules      = require('./schedules'),
-    roles          = require('./roles'),
-    settings       = require('./settings'),
-    tags           = require('./tags'),
-    invites        = require('./invites'),
-    clients        = require('./clients'),
-    users          = require('./users'),
-    slugs          = require('./slugs'),
-    themes         = require('./themes'),
-    subscribers    = require('./subscribers'),
+var _ = require('lodash'),
+    Promise = require('bluebird'),
+    models = require('../models'),
+    urlService = require('../services/url'),
+    configuration = require('./configuration'),
+    db = require('./db'),
+    mail = require('./mail'),
+    notifications = require('./notifications'),
+    posts = require('./posts'),
+    schedules = require('./schedules'),
+    roles = require('./roles'),
+    settings = require('./settings'),
+    tags = require('./tags'),
+    invites = require('./invites'),
+    redirects = require('./redirects'),
+    clients = require('./clients'),
+    users = require('./users'),
+    slugs = require('./slugs'),
+    themes = require('./themes'),
+    subscribers = require('./subscribers'),
     authentication = require('./authentication'),
-    uploads        = require('./upload'),
-    exporter       = require('../data/export'),
-    slack          = require('./slack'),
+    uploads = require('./upload'),
+    exporter = require('../data/exporter'),
+    slack = require('./slack'),
+    webhooks = require('./webhooks'),
+    oembed = require('./oembed'),
 
     http,
     addHeaders,
     cacheInvalidationHeader,
     locationHeader,
     contentDispositionHeaderExport,
-    contentDispositionHeaderSubscribers;
+    contentDispositionHeaderSubscribers,
+    contentDispositionHeaderRedirects,
+    contentDispositionHeaderRoutes;
 
 function isActiveThemeUpdate(method, endpoint, result) {
     if (endpoint === 'themes') {
@@ -81,7 +85,7 @@ cacheInvalidationHeader = function cacheInvalidationHeader(req, result) {
         if (endpoint === 'schedules' && subdir === 'posts') {
             return INVALIDATE_ALL;
         }
-        if (['settings', 'users', 'db', 'tags'].indexOf(endpoint) > -1) {
+        if (['settings', 'users', 'db', 'tags', 'redirects'].indexOf(endpoint) > -1) {
             return INVALIDATE_ALL;
         } else if (endpoint === 'posts') {
             if (method === 'DELETE') {
@@ -100,7 +104,8 @@ cacheInvalidationHeader = function cacheInvalidationHeader(req, result) {
             if (hasStatusChanged || wasPublishedUpdated) {
                 return INVALIDATE_ALL;
             } else {
-                return utils.url.urlFor({relativeUrl: utils.url.urlJoin('/', config.get('routeKeywords').preview, post.uuid, '/')});
+                // routeKeywords.preview: 'p'
+                return urlService.utils.urlFor({relativeUrl: urlService.utils.urlJoin('/p', post.uuid, '/')});
             }
         }
     }
@@ -118,7 +123,7 @@ cacheInvalidationHeader = function cacheInvalidationHeader(req, result) {
  * @return {String} Resolves to header string
  */
 locationHeader = function locationHeader(req, result) {
-    var apiRoot = utils.url.urlFor('api'),
+    var apiRoot = urlService.utils.urlFor('api'),
         location,
         newObject,
         statusQuery;
@@ -127,16 +132,19 @@ locationHeader = function locationHeader(req, result) {
         if (result.hasOwnProperty('posts')) {
             newObject = result.posts[0];
             statusQuery = '/?status=' + newObject.status;
-            location = utils.url.urlJoin(apiRoot, 'posts', newObject.id, statusQuery);
+            location = urlService.utils.urlJoin(apiRoot, 'posts', newObject.id, statusQuery);
         } else if (result.hasOwnProperty('notifications')) {
             newObject = result.notifications[0];
-            location = utils.url.urlJoin(apiRoot, 'notifications', newObject.id, '/');
+            location = urlService.utils.urlJoin(apiRoot, 'notifications', newObject.id, '/');
         } else if (result.hasOwnProperty('users')) {
             newObject = result.users[0];
-            location = utils.url.urlJoin(apiRoot, 'users', newObject.id, '/');
+            location = urlService.utils.urlJoin(apiRoot, 'users', newObject.id, '/');
         } else if (result.hasOwnProperty('tags')) {
             newObject = result.tags[0];
-            location = utils.url.urlJoin(apiRoot, 'tags', newObject.id, '/');
+            location = urlService.utils.urlJoin(apiRoot, 'tags', newObject.id, '/');
+        } else if (result.hasOwnProperty('webhooks')) {
+            newObject = result.webhooks[0];
+            location = urlService.utils.urlJoin(apiRoot, 'webhooks', newObject.id, '/');
         }
     }
 
@@ -167,6 +175,14 @@ contentDispositionHeaderExport = function contentDispositionHeaderExport() {
 contentDispositionHeaderSubscribers = function contentDispositionHeaderSubscribers() {
     var datetime = (new Date()).toJSON().substring(0, 10);
     return Promise.resolve('Attachment; filename="subscribers.' + datetime + '.csv"');
+};
+
+contentDispositionHeaderRedirects = function contentDispositionHeaderRedirects() {
+    return Promise.resolve('Attachment; filename="redirects.json"');
+};
+
+contentDispositionHeaderRoutes = () => {
+    return Promise.resolve('Attachment; filename="routes.yaml"');
 };
 
 addHeaders = function addHeaders(apiMethod, req, res, result) {
@@ -210,6 +226,30 @@ addHeaders = function addHeaders(apiMethod, req, res, result) {
             });
     }
 
+    // Add Redirects Content-Disposition Header
+    if (apiMethod === redirects.download) {
+        contentDisposition = contentDispositionHeaderRedirects()
+            .then(function contentDispositionHeaderRedirects(header) {
+                res.set({
+                    'Content-Disposition': header,
+                    'Content-Type': 'application/json',
+                    'Content-Length': JSON.stringify(result).length
+                });
+            });
+    }
+
+    // Add Routes Content-Disposition Header
+    if (apiMethod === settings.download) {
+        contentDisposition = contentDispositionHeaderRoutes()
+            .then((header) => {
+                res.set({
+                    'Content-Disposition': header,
+                    'Content-Type': 'application/yaml',
+                    'Content-Length': JSON.stringify(result).length
+                });
+            });
+    }
+
     return contentDisposition;
 };
 
@@ -229,7 +269,7 @@ http = function http(apiMethod) {
         var object = req.body,
             options = _.extend({}, req.file, {ip: req.ip}, req.query, req.params, {
                 context: {
-                    // @TODO: forward the client and user obj in 1.0 (options.context.user.id)
+                    // @TODO: forward the client and user obj (options.context.user.id)
                     user: ((req.user && req.user.id) || (req.user && models.User.isExternalUser(req.user.id))) ? req.user.id : null,
                     client: (req.client && req.client.slug) ? req.client.slug : null,
                     client_id: (req.client && req.client.id) ? req.client.id : null
@@ -250,8 +290,10 @@ http = function http(apiMethod) {
             if (req.method === 'DELETE') {
                 return res.status(204).end();
             }
-            // Keep CSV header and formatting
-            if (res.get('Content-Type') && res.get('Content-Type').indexOf('text/csv') === 0) {
+
+            // Keep CSV, yaml formatting
+            if (res.get('Content-Type') && res.get('Content-Type').indexOf('text/csv') === 0 ||
+                res.get('Content-Type') && res.get('Content-Type').indexOf('application/yaml') === 0) {
                 return res.status(200).send(response);
             }
 
@@ -293,7 +335,10 @@ module.exports = {
     uploads: uploads,
     slack: slack,
     themes: themes,
-    invites: invites
+    invites: invites,
+    redirects: redirects,
+    webhooks: webhooks,
+    oembed: oembed
 };
 
 /**

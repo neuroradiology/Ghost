@@ -1,15 +1,13 @@
-var should = require('should'), // jshint ignore:line
+var should = require('should'),
     sinon = require('sinon'),
     Promise = require('bluebird'),
-    moment = require('moment'),
+    moment = require('moment-timezone'),
     rewire = require('rewire'),
     _ = require('lodash'),
-    config = require('../../../../server/config'),
-    events = require(config.get('paths').corePath + '/server/events'),
-    models = require(config.get('paths').corePath + '/server/models'),
-    testUtils = require(config.get('paths').corePath + '/test/utils'),
-    logging = require(config.get('paths').corePath + '/server/logging'),
-    sequence = require(config.get('paths').corePath + '/server/utils/sequence'),
+    common = require('../../../../server/lib/common'),
+    models = require('../../../../server/models'),
+    testUtils = require('../../../../test/utils'),
+    sequence = require('../../../../server/lib/promise/sequence'),
     sandbox = sinon.sandbox.create();
 
 describe('Models: listeners', function () {
@@ -24,21 +22,21 @@ describe('Models: listeners', function () {
         };
 
     before(testUtils.teardown);
-    beforeEach(testUtils.setup('owner', 'user-token:0'));
+    beforeEach(testUtils.setup('owner', 'user-token:0', 'settings'));
 
     beforeEach(function () {
-        sandbox.stub(events, 'on', function (eventName, callback) {
+        sandbox.stub(common.events, 'on').callsFake(function (eventName, callback) {
             eventsToRemember[eventName] = callback;
         });
 
-        listeners = rewire(config.get('paths').corePath + '/server/models/base/listeners');
+        listeners = rewire('../../../../server/models/base/listeners');
     });
 
-    afterEach(function (done) {
-        events.on.restore();
+    afterEach(function () {
+        common.events.on.restore();
         sandbox.restore();
         scope.posts = [];
-        testUtils.teardown(done);
+        return testUtils.teardown();
     });
 
     describe('on timezone changed', function () {
@@ -98,7 +96,7 @@ describe('Models: listeners', function () {
                  */
 
                 // calculate the offset dynamically, because of DST
-                scope.timezoneOffset = moment.tz.zone('America/Los_Angeles').offset(now) - moment.tz.zone('Europe/London').offset(now);
+                scope.timezoneOffset = moment.tz.zone('America/Los_Angeles').utcOffset(now) - moment.tz.zone('Europe/London').utcOffset(now);
                 scope.newTimezone = 'America/Los_Angeles';
                 scope.oldTimezone = 'Europe/London';
 
@@ -155,7 +153,7 @@ describe('Models: listeners', function () {
                  * The post should be still scheduled for 8PM UTC time.
                  * So the database UTC string must be 2017-04-19 20:00:00.
                  */
-                scope.timezoneOffset = 180;
+                scope.timezoneOffset = moment.tz.zone('Etc/UTC').utcOffset(now) - moment.tz.zone('Asia/Baghdad').utcOffset(now);
                 scope.oldTimezone = 'Asia/Baghdad';
                 scope.newTimezone = 'Etc/UTC';
 
@@ -212,7 +210,7 @@ describe('Models: listeners', function () {
                  * The post should be still scheduled for 8PM UTC time.
                  * So the database UTC string must be 2017-04-18 11:00:00.
                  */
-                scope.timezoneOffset = -420;
+                scope.timezoneOffset = moment.tz.zone('Asia/Seoul').utcOffset(now) - moment.tz.zone('Europe/Amsterdam').utcOffset(now);
                 scope.oldTimezone = 'Europe/Amsterdam';
                 scope.newTimezone = 'Asia/Seoul';
 
@@ -256,7 +254,7 @@ describe('Models: listeners', function () {
                     post1 = posts[0],
                     listenerHasFinished = false;
 
-                sandbox.spy(logging, 'error');
+                sandbox.spy(common.logging, 'error');
                 sandbox.spy(models.Post, 'findAll');
 
                 // simulate a delay, so that the edit operation from the test here interrupts
@@ -277,7 +275,7 @@ describe('Models: listeners', function () {
                         });
                 });
 
-                scope.timezoneOffset = -180;
+                scope.timezoneOffset = moment.tz.zone('Asia/Baghdad').utcOffset(now) - moment.tz.zone('Etc/UTC').utcOffset(now);
                 scope.oldTimezone = 'Asia/Baghdad';
                 scope.newTimezone = 'Etc/UTC';
 
@@ -304,7 +302,7 @@ describe('Models: listeners', function () {
                             interval = setInterval(function () {
                                 if (listenerHasFinished) {
                                     clearInterval(interval);
-                                    logging.error.called.should.eql(false);
+                                    common.logging.error.called.should.eql(false);
                                     return done();
                                 }
                             }, 1000);
@@ -361,6 +359,72 @@ describe('Models: listeners', function () {
                     timeout = setTimeout(retry, 500);
                 }).catch(done);
             })();
+        });
+    });
+
+    describe('on notifications changed', function () {
+        it('nothing to delete', function (done) {
+            var notifications = JSON.stringify([
+                {
+                    addedAt: moment().subtract(1, 'week').format(),
+                    seen: true
+                },
+                {
+                    addedAt: moment().subtract(2, 'month').format(),
+                    seen: true
+                },
+                {
+                    addedAt: moment().subtract(1, 'day').format(),
+                    seen: false
+                }
+            ]);
+
+            models.Settings.edit({key: 'notifications', value: notifications}, testUtils.context.internal)
+                .then(function () {
+                    eventsToRemember['settings.notifications.edited']({
+                        attributes: {
+                            value: notifications
+                        }
+                    });
+
+                    return models.Settings.findOne({key: 'notifications'}, testUtils.context.internal);
+                }).then(function (model) {
+                    JSON.parse(model.get('value')).length.should.eql(3);
+                    done();
+                }).catch(done);
+        });
+
+        it('expect deletion', function (done) {
+            var notifications = JSON.stringify([
+                {
+                    content: 'keep-1',
+                    addedAt: moment().subtract(1, 'week').toDate(),
+                    seen: true
+                },
+                {
+                    content: 'delete-me',
+                    addedAt: moment().subtract(3, 'month').toDate(),
+                    seen: true
+                },
+                {
+                    content: 'keep-2',
+                    addedAt: moment().subtract(1, 'day').toDate(),
+                    seen: false
+                }
+            ]);
+
+            models.Settings.edit({key: 'notifications', value: notifications}, testUtils.context.internal)
+                .then(function () {
+                    setTimeout(function () {
+                        return models.Settings.findOne({key: 'notifications'}, testUtils.context.internal)
+                            .then(function (model) {
+                                JSON.parse(model.get('value')).length.should.eql(2);
+                                done();
+                            })
+                            .catch(done);
+                    }, 1000);
+                })
+                .catch(done);
         });
     });
 });

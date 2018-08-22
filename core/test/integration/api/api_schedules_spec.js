@@ -5,18 +5,16 @@ var should = require('should'),
     ObjectId = require('bson-objectid'),
     testUtils = require('../../utils'),
     config = require('../../../server/config'),
-    sequence = require(config.get('paths').corePath + '/server/utils/sequence'),
-    errors = require(config.get('paths').corePath + '/server/errors'),
-    api = require(config.get('paths').corePath + '/server/api'),
-    models = require(config.get('paths').corePath + '/server/models'),
+    sequence = require('../../../server/lib/promise/sequence'),
+    common = require('../../../server/lib/common'),
+    api = require('../../../server/api'),
+    models = require('../../../server/models'),
     sandbox = sinon.sandbox.create();
 
 describe('Schedules API', function () {
     var scope = {posts: []};
 
-    after(function (done) {
-        testUtils.teardown(done);
-    });
+    after(testUtils.teardown);
 
     describe('fn: getScheduledPosts', function () {
         before(function (done) {
@@ -104,7 +102,7 @@ describe('Schedules API', function () {
                 api.schedules.getScheduledPosts()
                     .then(function (result) {
                         result.posts.length.should.eql(5);
-                        Object.keys(result.posts[0].toJSON()).should.eql(['id', 'published_at', 'created_at', 'author', 'url', 'comment_id']);
+                        testUtils.API.checkResponse(result, 'posts', null, ['meta']);
                         done();
                     })
                     .catch(done);
@@ -166,7 +164,7 @@ describe('Schedules API', function () {
                     from: 'bee'
                 }).catch(function (err) {
                     should.exist(err);
-                    (err instanceof errors.ValidationError).should.eql(true);
+                    (err instanceof common.errors.ValidationError).should.eql(true);
                     done();
                 });
             });
@@ -176,7 +174,7 @@ describe('Schedules API', function () {
     describe('fn: publishPost', function () {
         var originalCannotScheduleAPostBeforeInMinutes;
 
-        beforeEach(function (done) {
+        before(function (done) {
             originalCannotScheduleAPostBeforeInMinutes = config.get('times').cannotScheduleAPostBeforeInMinutes;
 
             // we can insert published_at less then 5minutes
@@ -313,7 +311,7 @@ describe('Schedules API', function () {
                 }, 500);
 
                 // target post to publish was read already, simulate a client request
-                sandbox.stub(api.posts, 'edit', function () {
+                sandbox.stub(api.posts, 'edit').callsFake(function () {
                     var self = this,
                         args = arguments;
 
@@ -391,7 +389,7 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NoPermissionError).should.eql(true);
+                        (err instanceof common.errors.NoPermissionError).should.eql(true);
                         done();
                     });
             });
@@ -403,13 +401,13 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NoPermissionError).should.eql(true);
+                        (err instanceof common.errors.NoPermissionError).should.eql(true);
                         done();
                     });
             });
 
             it('other user has no access', function (done) {
-                testUtils.fixtures.insertOne('users', 'createUser', 4)
+                testUtils.fixtures.insertOne('User', 'users', 'createUser', 4)
                     .then(function (result) {
                         api.schedules.publishPost({id: scope.posts[0].id, context: {user: result[0]}})
                             .then(function () {
@@ -417,7 +415,7 @@ describe('Schedules API', function () {
                             })
                             .catch(function (err) {
                                 should.exist(err);
-                                (err instanceof errors.NoPermissionError).should.eql(true);
+                                (err instanceof common.errors.NoPermissionError).should.eql(true);
                                 done();
                             });
                     })
@@ -431,7 +429,7 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.ValidationError).should.eql(true);
+                        (err instanceof common.errors.ValidationError).should.eql(true);
                         done();
                     });
             });
@@ -443,7 +441,7 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NotFoundError).should.eql(true);
+                        (err instanceof common.errors.NotFoundError).should.eql(true);
                         done();
                     });
             });
@@ -455,7 +453,7 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NotFoundError).should.eql(true);
+                        (err instanceof common.errors.NotFoundError).should.eql(true);
                         done();
                     });
             });
@@ -467,7 +465,7 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NotFoundError).should.eql(true);
+                        (err instanceof common.errors.NotFoundError).should.eql(true);
                         done();
                     });
             });
@@ -479,7 +477,7 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NotFoundError).should.eql(true);
+                        (err instanceof common.errors.NotFoundError).should.eql(true);
                         done();
                     });
             });
@@ -491,7 +489,7 @@ describe('Schedules API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NotFoundError).should.eql(true);
+                        (err instanceof common.errors.NotFoundError).should.eql(true);
                         done();
                     });
             });

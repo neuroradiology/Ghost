@@ -11,14 +11,22 @@ var proxy = require('./proxy'),
     getMetaDataExcerpt = proxy.metaData.getMetaDataExcerpt;
 
 module.exports = function excerpt(options) {
-    var truncateOptions = (options || {}).hash || {};
+    var truncateOptions = (options || {}).hash || {},
+        excerptText = this.custom_excerpt ? String(this.custom_excerpt) : String(this.html);
 
     truncateOptions = _.pick(truncateOptions, ['words', 'characters']);
     _.keys(truncateOptions).map(function (key) {
         truncateOptions[key] = parseInt(truncateOptions[key], 10);
     });
 
+    if (!_.isEmpty(this.custom_excerpt)) {
+        truncateOptions.characters = this.custom_excerpt.length;
+        if (truncateOptions.words) {
+            delete truncateOptions.words;
+        }
+    }
+
     return new SafeString(
-        getMetaDataExcerpt(String(this.html), truncateOptions)
+        getMetaDataExcerpt(excerptText, truncateOptions)
     );
 };

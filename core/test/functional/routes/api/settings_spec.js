@@ -1,5 +1,8 @@
 var should = require('should'),
+    _ = require('lodash'),
     supertest = require('supertest'),
+    os = require('os'),
+    fs = require('fs-extra'),
     testUtils = require('../../../utils'),
     config = require('../../../../../core/server/config'),
     ghost = testUtils.startGhost,
@@ -8,26 +11,17 @@ var should = require('should'),
 describe('Settings API', function () {
     var accesstoken = '', ghostServer;
 
-    before(function (done) {
-        // starting ghost automatically populates the db
-        // TODO: prevent db init, and manage bringing up the DB with fixtures ourselves
-        ghost().then(function (_ghostServer) {
-            ghostServer = _ghostServer;
-            return ghostServer.start();
-        }).then(function () {
-            request = supertest.agent(config.get('url'));
-        }).then(function () {
-            return testUtils.doAuth(request);
-        }).then(function (token) {
-            accesstoken = token;
-            done();
-        }).catch(done);
-    });
-
-    after(function () {
-        return testUtils.clearData()
+    before(function () {
+        return ghost()
+            .then(function (_ghostServer) {
+                ghostServer = _ghostServer;
+                request = supertest.agent(config.get('url'));
+            })
             .then(function () {
-                return ghostServer.stop();
+                return testUtils.doAuth(request);
+            })
+            .then(function (token) {
+                accesstoken = token;
             });
     });
 
@@ -48,6 +42,11 @@ describe('Settings API', function () {
                 should.exist(jsonResponse);
 
                 testUtils.API.checkResponse(jsonResponse, 'settings');
+
+                JSON.parse(_.find(jsonResponse.settings, {key: 'unsplash'}).value).isActive.should.eql(true);
+                JSON.parse(_.find(jsonResponse.settings, {key: 'amp'}).value).should.eql(true);
+                should.not.exist(_.find(jsonResponse.settings, {key: 'permalinks'}));
+
                 done();
             });
     });
@@ -72,6 +71,21 @@ describe('Settings API', function () {
                 testUtils.API.checkResponseValue(jsonResponse.settings[0], ['id', 'key', 'value', 'type', 'created_at', 'created_by', 'updated_at', 'updated_by']);
                 jsonResponse.settings[0].key.should.eql('title');
                 testUtils.API.isISO8601(jsonResponse.settings[0].created_at).should.be.true();
+                done();
+            });
+    });
+
+    it('can\'t retrieve permalinks', function (done) {
+        request.get(testUtils.API.getApiQuery('settings/permalinks/'))
+            .set('Authorization', 'Bearer ' + accesstoken)
+            .expect('Content-Type', /json/)
+            .expect('Cache-Control', testUtils.cacheRules.private)
+            .expect(404)
+            .end(function (err, res) {
+                if (err) {
+                    return done(err);
+                }
+
                 done();
             });
     });
@@ -139,6 +153,26 @@ describe('Settings API', function () {
             });
     });
 
+    it('can\'t edit permalinks', function (done) {
+        const settingToChange = {
+            settings: [{key: 'permalinks', value: '/:primary_author/:slug/'}]
+        };
+
+        request.put(testUtils.API.getApiQuery('settings/'))
+            .set('Authorization', 'Bearer ' + accesstoken)
+            .send(settingToChange)
+            .expect('Content-Type', /json/)
+            .expect('Cache-Control', testUtils.cacheRules.private)
+            .expect(404)
+            .end(function (err, res) {
+                if (err) {
+                    return done(err);
+                }
+
+                done();
+            });
+    });
+
     it('can\'t edit settings with invalid accesstoken', function (done) {
         request.get(testUtils.API.getApiQuery('settings/'))
             .set('Authorization', 'Bearer ' + accesstoken)
@@ -159,8 +193,7 @@ describe('Settings API', function () {
                     .set('Authorization', 'Bearer ' + 'invalidtoken')
                     .send(jsonResponse)
                     .expect(401)
-                    .end(function (err, res) {
-                        /*jshint unused:false*/
+                    .end(function (err) {
                         if (err) {
                             return done(err);
                         }
@@ -204,6 +237,39 @@ describe('Settings API', function () {
                         testUtils.API.checkResponseValue(jsonResponse.errors[0], ['message', 'errorType']);
                         done();
                     });
+            });
+    });
+
+    it('can download routes.yaml', ()=> {
+        return request.get(testUtils.API.getApiQuery('settings/routes/yaml/'))
+            .set('Authorization', 'Bearer ' + accesstoken)
+            .set('Accept', 'application/yaml')
+            .expect(200)
+            .then((res)=> {
+                res.headers['content-disposition'].should.eql('Attachment; filename="routes.yaml"');
+                res.headers['content-type'].should.eql('application/yaml; charset=utf-8');
+                res.headers['content-length'].should.eql('138');
+            });
+    });
+
+    it('can upload routes.yaml', ()=> {
+        const newRoutesYamlPath = `${os.tmpdir()}/routes.yaml`;
+
+        return fs.writeFile(newRoutesYamlPath, 'routes:\ncollections:\ntaxonomies:\n')
+            .then(()=> {
+                return request
+                    .post(testUtils.API.getApiQuery('settings/routes/yaml/'))
+                    .set('Authorization', 'Bearer ' + accesstoken)
+                    .set('Origin', testUtils.API.getURL())
+                    .attach('routes', newRoutesYamlPath)
+                    .expect('Content-Type', /application\/json/)
+                    .expect(200);
+            })
+            .then((res)=> {
+                res.headers['x-cache-invalidate'].should.eql('/*');
+            })
+            .finally(()=> {
+                return ghostServer.stop();
             });
     });
 });

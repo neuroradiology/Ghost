@@ -1,51 +1,39 @@
-'use strict';
-
 const debug = require('ghost-ignition').debug('importer:users'),
     _ = require('lodash'),
     BaseImporter = require('./base'),
-    globalUtils = require('../../../../utils');
+    models = require('../../../../models');
 
 class UsersImporter extends BaseImporter {
-    constructor(options) {
-        super(_.extend(options, {
+    constructor(allDataFromFile) {
+        super(allDataFromFile, {
             modelName: 'User',
             dataKeyToImport: 'users',
-            requiredData: ['roles', 'roles_users']
-        }));
+            requiredFromFile: ['roles', 'roles_users']
+        });
+    }
 
-        // Map legacy keys
-        this.legacyKeys = {
-            image: 'profile_image',
-            cover: 'cover_image',
-            last_login: 'last_seen'
-        };
+    fetchExisting(modelOptions) {
+        return models.User.findAll(_.merge({columns: ['id', 'slug', 'email'], withRelated: ['roles']}, modelOptions))
+            .then((existingData) => {
+                this.existingData = existingData.toJSON();
+            });
     }
 
     /**
-     * - all imported users are locked and get a random password
+     * - by default all imported users are locked and get a random password
      * - they have to follow the password forgotten flow
      * - we add the role by name [supported by the user model, see User.add]
      *   - background: if you import roles, but they exist already, the related user roles reference to an old model id
+     *
+     *   If importOptions object is supplied with a property of importPersistUser then the user status is not locked
      */
     beforeImport() {
         debug('beforeImport');
 
-        let self = this, role, lookup = {};
-
-        // Remove legacy field language
-        this.dataToImport = _.filter(this.dataToImport, function (data) {
-            return _.omit(data, 'language');
-        });
-
-        this.dataToImport = this.dataToImport.map(self.legacyMapper);
-
-        _.each(this.dataToImport, function (model) {
-            model.password = globalUtils.uid(50);
-            model.status = 'locked';
-        });
+        let role, lookup = {};
 
         // NOTE: sort out duplicated roles based on incremental id
-        _.each(this.roles_users, function (attachedRole) {
+        _.each(this.requiredFromFile.roles_users, (attachedRole) => {
             if (lookup.hasOwnProperty(attachedRole.user_id)) {
                 if (lookup[attachedRole.user_id].id < attachedRole.id) {
                     lookup[attachedRole.user_id] = attachedRole;
@@ -55,10 +43,10 @@ class UsersImporter extends BaseImporter {
             }
         });
 
-        this.roles_users = _.toArray(lookup);
+        this.requiredFromFile.roles_users = _.toArray(lookup);
 
-        _.each(this.roles_users, function (attachedRole) {
-            role = _.find(self.roles, function (role) {
+        _.each(this.requiredFromFile.roles_users, (attachedRole) => {
+            role = _.find(this.requiredFromFile.roles, (role) => {
                 if (attachedRole.role_id === role.id) {
                     return role;
                 }
@@ -69,7 +57,7 @@ class UsersImporter extends BaseImporter {
                 role = {name: 'Author'};
             }
 
-            _.each(self.dataToImport, function (obj) {
+            _.each(this.dataToImport, (obj) => {
                 if (attachedRole.user_id === obj.id) {
                     if (!_.isArray(obj.roles)) {
                         obj.roles = [];
@@ -89,8 +77,8 @@ class UsersImporter extends BaseImporter {
         return super.beforeImport();
     }
 
-    doImport(options) {
-        return super.doImport(options);
+    doImport(options, importOptions) {
+        return super.doImport(options, importOptions);
     }
 }
 

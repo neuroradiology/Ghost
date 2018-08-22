@@ -3,43 +3,33 @@ var should = require('should'),
     testUtils = require('../../../utils'),
     moment = require('moment'),
     user = testUtils.DataGenerator.forModel.users[0],
-    userForKnex = testUtils.DataGenerator.forKnex.users[0],
     models = require('../../../../../core/server/models'),
+    constants = require('../../../../../core/server/lib/constants'),
     config = require('../../../../../core/server/config'),
-    utils = require('../../../../../core/server/utils'),
+    security = require('../../../../../core/server/lib/security'),
+    settingsCache = require('../../../../../core/server/services/settings/cache'),
     ghost = testUtils.startGhost,
     request;
 
 describe('Authentication API', function () {
     var accesstoken = '', ghostServer;
 
-    before(function (done) {
-        // starting ghost automatically populates the db
-        // TODO: prevent db init, and manage bringing up the DB with fixtures ourselves
-        ghost().then(function (_ghostServer) {
-            ghostServer = _ghostServer;
-            return ghostServer.start();
-        }).then(function () {
-            request = supertest.agent(config.get('url'));
-        }).then(function () {
-            return testUtils.doAuth(request);
-        }).then(function (token) {
-            accesstoken = token;
-            done();
-        }).catch(done);
-    });
-
-    afterEach(function (done) {
-        testUtils.clearBruteData().then(function () {
-            done();
-        });
-    });
-
-    after(function () {
-        return testUtils.clearData()
+    before(function () {
+        return ghost()
+            .then(function (_ghostServer) {
+                ghostServer = _ghostServer;
+                request = supertest.agent(config.get('url'));
+            })
             .then(function () {
-                return ghostServer.stop();
+                return testUtils.doAuth(request);
+            })
+            .then(function (token) {
+                accesstoken = token;
             });
+    });
+
+    afterEach(function () {
+        return testUtils.clearBruteData();
     });
 
     it('can authenticate', function (done) {
@@ -184,6 +174,18 @@ describe('Authentication API', function () {
                                 token: accesstoken
                             }).then(function (oldAccessToken) {
                                 moment(oldAccessToken.get('expires')).diff(moment(), 'minutes').should.be.below(6);
+                                return models.Refreshtoken.findOne({
+                                    token: refreshToken
+                                });
+                            }).then(function (refreshTokenModel) {
+                                // NOTE: the static 6 month ms number in our constants are based on 30 days
+                                // We have to compare against the static number. We can't compare against the month in
+                                // the next 6 month dynamically, because each month has a different number of days,
+                                // which results in a different ms number.
+                                moment(Date.now() + constants.SIX_MONTH_MS)
+                                    .startOf('day')
+                                    .diff(moment(refreshTokenModel.get('expires')).startOf('day'), 'month').should.eql(0);
+
                                 done();
                             });
                         });
@@ -215,14 +217,13 @@ describe('Authentication API', function () {
     });
 
     it('reset password', function (done) {
-        models.Settings
-            .findOne({key: 'db_hash'})
-            .then(function (response) {
-                var token = utils.tokens.resetToken.generateHash({
+        models.User.getOwnerUser(testUtils.context.internal)
+            .then(function (ownerUser) {
+                var token = security.tokens.resetToken.generateHash({
                     expires: Date.now() + (1000 * 60),
                     email: user.email,
-                    dbHash: response.attributes.value,
-                    password: userForKnex.password
+                    dbHash: settingsCache.get('db_hash'),
+                    password: ownerUser.get('password')
                 });
 
                 request.put(testUtils.API.getApiQuery('authentication/passwordreset'))
@@ -231,8 +232,8 @@ describe('Authentication API', function () {
                     .send({
                         passwordreset: [{
                             token: token,
-                            newPassword: 'abcdefgh',
-                            ne2Password: 'abcdefgh'
+                            newPassword: 'thisissupersafe',
+                            ne2Password: 'thisissupersafe'
                         }]
                     })
                     .expect('Content-Type', /json/)

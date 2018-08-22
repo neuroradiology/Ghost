@@ -3,14 +3,14 @@ var should = require('should'),
     testUtils = require('../../utils'),
     _ = require('lodash'),
     Promise = require('bluebird'),
-    uid = require('../../../server/utils').uid,
     AuthAPI = require('../../../server/api/authentication'),
     mail = require('../../../server/api/mail'),
     models = require('../../../server/models'),
-    errors = require('../../../server/errors'),
+    common = require('../../../server/lib/common'),
+    security = require('../../../server/lib/security'),
     context = testUtils.context,
-    Accesstoken,
-    Refreshtoken,
+    accessToken,
+    refreshToken,
     User,
 
     sandbox = sinon.sandbox.create();
@@ -32,8 +32,8 @@ describe('Authentication API', function () {
         testReset = {
             passwordreset: [{
                 token: 'abc',
-                newPassword: 'abcdefgh',
-                ne2Password: 'abcdefgh'
+                newPassword: 'abcdefghij',
+                ne2Password: 'abcdefghij'
             }]
         };
 
@@ -43,7 +43,7 @@ describe('Authentication API', function () {
 
     // Stub mail
     beforeEach(function () {
-        sandbox.stub(mail, 'send', function () {
+        sandbox.stub(mail, 'send').callsFake(function () {
             return Promise.resolve();
         });
     });
@@ -66,7 +66,7 @@ describe('Authentication API', function () {
                     var setupData = {
                         name: 'test user',
                         email: 'test@example.com',
-                        password: 'areallygoodpassword',
+                        password: 'thisissupersafe',
                         blogTitle: 'a test blog'
                     };
 
@@ -75,8 +75,9 @@ describe('Authentication API', function () {
                             done(new Error('Setup ran when it should not have.'));
                         }).catch(function (err) {
                             should.exist(err);
-                            err.name.should.equal('InternalServerError');
-                            err.statusCode.should.equal(500);
+                            err.name.should.equal('NotFoundError');
+                            err.message.should.equal('Owner not found');
+                            err.statusCode.should.equal(404);
 
                             done();
                         }).catch(done);
@@ -102,7 +103,7 @@ describe('Authentication API', function () {
                 var setupData = {
                     name: 'test user',
                     email: 'test@example.com',
-                    password: 'areallygoodpassword',
+                    password: 'thisissupersafe',
                     blogTitle: 'a test blog'
                 };
 
@@ -127,7 +128,7 @@ describe('Authentication API', function () {
                 var setupData = {
                     name: 'test user',
                     email: 'test@example.com',
-                    password: 'areallygoodpassword'
+                    password: 'thisissupersafe'
                 };
 
                 AuthAPI.setup({setup: [setupData]}).then(function (result) {
@@ -202,8 +203,8 @@ describe('Authentication API', function () {
 
         describe('Completed', function () {
             before(function () {
-                Accesstoken = require('../../../server/models/accesstoken').Accesstoken;
-                Refreshtoken = require('../../../server/models/refreshtoken').Refreshtoken;
+                accessToken = require('../../../server/models/accesstoken').Accesstoken;
+                refreshToken = require('../../../server/models/refreshtoken').Refreshtoken;
                 User = require('../../../server/models/user').User;
             });
 
@@ -222,7 +223,7 @@ describe('Authentication API', function () {
                 var setupData = {
                     name: 'test user',
                     email: 'test@example.com',
-                    password: 'areallygoodpassword',
+                    password: 'thisissupersafe',
                     blogTitle: 'a test blog'
                 };
 
@@ -272,7 +273,7 @@ describe('Authentication API', function () {
                                     token: invite.get('token'),
                                     email: invite.get('email'),
                                     name: invite.get('email'),
-                                    password: 'eightcharacterslong'
+                                    password: 'tencharacterslong'
                                 }
                             ]
                         });
@@ -285,7 +286,7 @@ describe('Authentication API', function () {
                         should.not.exist(_invite);
                         return models.User.findOne({
                             email: invite.get('email')
-                        }, _.merge({include: ['roles']}, context.internal));
+                        }, _.merge({withRelated: ['roles']}, context.internal));
                     })
                     .then(function (user) {
                         user.toJSON().roles.length.should.eql(1);
@@ -312,7 +313,7 @@ describe('Authentication API', function () {
                                     token: invite.get('token'),
                                     email: invite.get('email'),
                                     name: invite.get('email'),
-                                    password: 'eightcharacterslong'
+                                    password: 'tencharacterslong'
                                 }
                             ]
                         });
@@ -322,7 +323,7 @@ describe('Authentication API', function () {
                     })
                     .catch(function (err) {
                         should.exist(err);
-                        (err instanceof errors.NotFoundError).should.eql(true);
+                        (err instanceof common.errors.NotFoundError).should.eql(true);
                         err.message.should.eql('Invite is expired.');
                     });
             });
@@ -368,9 +369,9 @@ describe('Authentication API', function () {
             });
 
             it('should allow an access token to be revoked', function (done) {
-                var id = uid(191);
+                var id = security.identifier.uid(191);
 
-                Accesstoken.add({
+                accessToken.add({
                     token: id,
                     expires: Date.now() + 8640000,
                     user_id: testUtils.DataGenerator.Content.users[0].id,
@@ -387,7 +388,7 @@ describe('Authentication API', function () {
                     should.exist(response);
                     response.token.should.equal(id);
 
-                    return Accesstoken.findOne({token: id});
+                    return accessToken.findOne({token: id});
                 }).then(function (token) {
                     should.not.exist(token);
 
@@ -408,7 +409,7 @@ describe('Authentication API', function () {
                 var user = {
                         name: 'uninvited user',
                         email: 'notinvited@example.com',
-                        password: '12345678',
+                        password: 'thisissupersafe',
                         status: 'active'
                     },
                     options = {
@@ -435,9 +436,9 @@ describe('Authentication API', function () {
             });
 
             it('should allow a refresh token to be revoked', function (done) {
-                var id = uid(191);
+                var id = security.identifier.uid(191);
 
-                Refreshtoken.add({
+                refreshToken.add({
                     token: id,
                     expires: Date.now() + 8640000,
                     user_id: testUtils.DataGenerator.Content.users[0].id,
@@ -454,7 +455,7 @@ describe('Authentication API', function () {
                     should.exist(response);
                     response.token.should.equal(id);
 
-                    return Refreshtoken.findOne({token: id});
+                    return refreshToken.findOne({token: id});
                 }).then(function (token) {
                     should.not.exist(token);
 
@@ -463,9 +464,9 @@ describe('Authentication API', function () {
             });
 
             it('should return success when attempting to revoke an invalid token', function (done) {
-                var id = uid(191);
+                var id = security.identifier.uid(191);
 
-                Accesstoken.add({
+                accessToken.add({
                     token: id,
                     expires: Date.now() + 8640000,
                     user_id: testUtils.DataGenerator.Content.users[0].id,
@@ -506,7 +507,7 @@ describe('Authentication API', function () {
                 var setupData = {
                     name: 'test user',
                     email: 'test@example.com',
-                    password: 'areallygoodpassword',
+                    password: 'thisissupersafe',
                     blogTitle: 'a test blog'
                 };
 
@@ -539,7 +540,7 @@ describe('Authentication API', function () {
                 var setupData = {
                     name: 'test user',
                     email: 'test@example.com',
-                    password: 'areallygoodpassword',
+                    password: 'thisissupersafe',
                     blogTitle: 'a test blog'
                 };
 
@@ -572,7 +573,7 @@ describe('Authentication API', function () {
                 var setupData = {
                     name: 'test user',
                     email: 'test@example.com',
-                    password: 'areallygoodpassword',
+                    password: 'thisissupersafe',
                     blogTitle: 'a test blog'
                 };
 

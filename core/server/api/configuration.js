@@ -1,17 +1,18 @@
 // # Configuration API
 // RESTful API for browsing the configuration
-var _                  = require('lodash'),
-    config             = require('../config'),
-    settingsCache      = require('../settings/cache'),
-    ghostVersion       = require('../utils/ghost-version'),
-    models             = require('../models'),
-    Promise            = require('bluebird'),
-    utils              = require('../utils'),
+const Promise = require('bluebird'),
+    {isPlainObject} = require('lodash'),
+    urlService = require('../services/url'),
+    models = require('../models'),
+    config = require('../config'),
+    labs = require('../services/labs'),
+    settingsCache = require('../services/settings/cache'),
+    ghostVersion = require('../lib/ghost-version');
 
-    configuration;
+let configuration;
 
 function fetchAvailableTimezones() {
-    var timezones = require('../data/timezones.json');
+    const timezones = require('../data/timezones.json');
     return timezones;
 }
 
@@ -20,18 +21,18 @@ function getAboutConfig() {
         version: ghostVersion.full,
         environment: config.get('env'),
         database: config.get('database').client,
-        mail: _.isObject(config.get('mail')) ? config.get('mail').transport : ''
+        mail: isPlainObject(config.get('mail')) ? config.get('mail').transport : ''
     };
 }
 
 function getBaseConfig() {
     return {
-        useGravatar:    !config.isPrivacyDisabled('useGravatar'),
-        publicAPI:      config.get('publicAPI') === true,
-        blogUrl:        utils.url.urlFor('home', true),
-        blogTitle:      settingsCache.get('title'),
-        routeKeywords:  config.get('routeKeywords'),
-        clientExtensions: config.get('clientExtensions')
+        useGravatar: !config.isPrivacyDisabled('useGravatar'),
+        publicAPI: labs.isSet('publicAPI'),
+        blogUrl: urlService.utils.urlFor('home', true),
+        blogTitle: settingsCache.get('title'),
+        clientExtensions: config.get('clientExtensions'),
+        enableDeveloperExperiments: config.get('enableDeveloperExperiments')
     };
 }
 
@@ -39,10 +40,8 @@ function getBaseConfig() {
  * ## Configuration API Methods
  *
  * We need to load the client credentials dynamically.
- * For example: on bootstrap ghost-auth get's created and if we load them here in parallel,
- * it can happen that we won't get any client credentials or wrong credentials.
  *
- * **See:** [API Methods](index.js.html#api%20methods)
+ * **See:** [API Methods](constants.js.html#api%20methods)
  */
 configuration = {
 
@@ -54,26 +53,14 @@ configuration = {
      */
     read: function read(options) {
         options = options || {};
-        var ops = {};
 
         if (!options.key) {
-            ops.ghostAdmin = models.Client.findOne({slug: 'ghost-admin'});
+            return models.Client.findOne({slug: 'ghost-admin'})
+                .then((ghostAdmin) => {
+                    const configuration = getBaseConfig();
 
-            if (config.get('auth:type') === 'ghost') {
-                ops.ghostAuth = models.Client.findOne({slug: 'ghost-auth'});
-            }
-
-            return Promise.props(ops)
-                .then(function (result) {
-                    var configuration = getBaseConfig();
-
-                    configuration.clientId = result.ghostAdmin.get('slug');
-                    configuration.clientSecret = result.ghostAdmin.get('secret');
-
-                    if (config.get('auth:type') === 'ghost') {
-                        configuration.ghostAuthId = result.ghostAuth && result.ghostAuth.get('uuid') || 'not-available';
-                        configuration.ghostAuthUrl = config.get('auth:url');
-                    }
+                    configuration.clientId = ghostAdmin.get('slug');
+                    configuration.clientSecret = ghostAdmin.get('secret');
 
                     return {configuration: [configuration]};
                 });
