@@ -6,7 +6,7 @@ var debug = require('ghost-ignition').debug('server'),
     path = require('path'),
     _ = require('lodash'),
     config = require('./config'),
-    urlService = require('./services/url'),
+    urlUtils = require('./lib/url-utils'),
     common = require('./lib/common'),
     moment = require('moment');
 
@@ -24,6 +24,13 @@ function GhostServer(rootApp) {
     // Expose config module for use externally.
     this.config = config;
 }
+
+const debugInfo = {
+    versions: process.versions,
+    platform: process.platform,
+    arch: process.arch,
+    release: process.release
+};
 
 /**
  * ## Public API methods
@@ -45,7 +52,7 @@ GhostServer.prototype.start = function (externalApp) {
         };
 
     return new Promise(function (resolve, reject) {
-        if (config.get('server').hasOwnProperty('socket')) {
+        if (Object.prototype.hasOwnProperty.call(config.get('server'), 'socket')) {
             socketConfig = config.get('server').socket;
 
             if (_.isString(socketConfig)) {
@@ -193,7 +200,7 @@ GhostServer.prototype.logStartMessages = function () {
     // Startup & Shutdown messages
     if (config.get('env') === 'production') {
         common.logging.info(common.i18n.t('notices.httpServer.ghostIsRunningIn', {env: config.get('env')}));
-        common.logging.info(common.i18n.t('notices.httpServer.yourBlogIsAvailableOn', {url: urlService.utils.urlFor('home', true)}));
+        common.logging.info(common.i18n.t('notices.httpServer.yourBlogIsAvailableOn', {url: urlUtils.urlFor('home', true)}));
         common.logging.info(common.i18n.t('notices.httpServer.ctrlCToShutDown'));
     } else {
         common.logging.info(common.i18n.t('notices.httpServer.ghostIsRunningIn', {env: config.get('env')}));
@@ -201,7 +208,7 @@ GhostServer.prototype.logStartMessages = function () {
             host: config.get('server').socket || config.get('server').host,
             port: config.get('server').port
         }));
-        common.logging.info(common.i18n.t('notices.httpServer.urlConfiguredAs', {url: urlService.utils.urlFor('home', true)}));
+        common.logging.info(common.i18n.t('notices.httpServer.urlConfiguredAs', {url: urlUtils.urlFor('home', true)}));
         common.logging.info(common.i18n.t('notices.httpServer.ctrlCToShutDown'));
     }
 
@@ -281,7 +288,7 @@ const connectToBootstrapSocket = (message) => {
             });
 
             client.on('error', (err) => {
-                common.logging.warn(`Can\'t connect to the bootstrap socket (${socketAddress.host} ${socketAddress.port}) ${err.code}`);
+                common.logging.warn(`Can't connect to the bootstrap socket (${socketAddress.host} ${socketAddress.port}) ${err.code}`);
 
                 client.removeAllListeners();
 
@@ -333,7 +340,8 @@ module.exports.announceServerStart = function announceServerStart() {
     // CASE: IPC communication to the CLI via child process.
     if (process.send) {
         process.send({
-            started: true
+            started: true,
+            debug: debugInfo
         });
     }
 
@@ -364,7 +372,8 @@ module.exports.announceServerStopped = function announceServerStopped(error) {
     if (process.send) {
         process.send({
             started: false,
-            error: error
+            error: error,
+            debug: debugInfo
         });
     }
 
@@ -372,7 +381,8 @@ module.exports.announceServerStopped = function announceServerStopped(error) {
     if (config.get('bootstrap-socket')) {
         return connectToBootstrapSocket({
             started: false,
-            error: error
+            error: error,
+            debug: debugInfo
         });
     }
 

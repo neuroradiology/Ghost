@@ -19,7 +19,6 @@ CanThisResult.prototype.buildObjectTypeHandlers = function (objTypes, actType, c
         user: models.User,
         permission: models.Permission,
         setting: models.Settings,
-        subscriber: models.Subscriber,
         invite: models.Invite
     };
 
@@ -50,9 +49,9 @@ CanThisResult.prototype.buildObjectTypeHandlers = function (objTypes, actType, c
             return permissionLoad.then(function (loadedPermissions) {
                 // Iterate through the user permissions looking for an affirmation
                 var userPermissions = loadedPermissions.user ? loadedPermissions.user.permissions : null,
-                    appPermissions = loadedPermissions.app ? loadedPermissions.app.permissions : null,
+                    apiKeyPermissions = loadedPermissions.apiKey ? loadedPermissions.apiKey.permissions : null,
                     hasUserPermission,
-                    hasAppPermission,
+                    hasApiKeyPermission,
                     checkPermission = function (perm) {
                         var permObjId;
 
@@ -82,20 +81,22 @@ CanThisResult.prototype.buildObjectTypeHandlers = function (objTypes, actType, c
                     hasUserPermission = _.some(userPermissions, checkPermission);
                 }
 
-                // Check app permissions if they were passed
-                hasAppPermission = true;
-                if (!_.isNull(appPermissions)) {
-                    hasAppPermission = _.some(appPermissions, checkPermission);
+                // Check api key permissions if they were passed
+                hasApiKeyPermission = true;
+                if (!_.isNull(apiKeyPermissions)) {
+                    // api key request have no user, but we want the user permissions checks to pass
+                    hasUserPermission = true;
+                    hasApiKeyPermission = _.some(apiKeyPermissions, checkPermission);
                 }
 
                 // Offer a chance for the TargetModel to override the results
                 if (TargetModel && _.isFunction(TargetModel.permissible)) {
                     return TargetModel.permissible(
-                        modelId, actType, context, unsafeAttrs, loadedPermissions, hasUserPermission, hasAppPermission
+                        modelId, actType, context, unsafeAttrs, loadedPermissions, hasUserPermission, hasApiKeyPermission
                     );
                 }
 
-                if (hasUserPermission && hasAppPermission) {
+                if (hasUserPermission && hasApiKeyPermission) {
                     return;
                 }
 
@@ -110,10 +111,10 @@ CanThisResult.prototype.buildObjectTypeHandlers = function (objTypes, actType, c
 CanThisResult.prototype.beginCheck = function (context) {
     var self = this,
         userPermissionLoad,
-        appPermissionLoad,
+        apiKeyPermissionLoad,
         permissionsLoad;
 
-    // Get context.user and context.app
+    // Get context.user, context.api_key and context.app
     context = parseContext(context);
 
     if (actionsMap.empty()) {
@@ -128,19 +129,19 @@ CanThisResult.prototype.beginCheck = function (context) {
         userPermissionLoad = Promise.resolve(null);
     }
 
-    // Kick off loading of app permissions if necessary
-    if (context.app) {
-        appPermissionLoad = providers.app(context.app);
+    // Kick off loading of api key permissions if necessary
+    if (context.api_key) {
+        apiKeyPermissionLoad = providers.apiKey(context.api_key.id);
     } else {
-        // Resolve null if no context.app
-        appPermissionLoad = Promise.resolve(null);
+        // Resolve null if no context.api_key
+        apiKeyPermissionLoad = Promise.resolve(null);
     }
 
     // Wait for both user and app permissions to load
-    permissionsLoad = Promise.all([userPermissionLoad, appPermissionLoad]).then(function (result) {
+    permissionsLoad = Promise.all([userPermissionLoad, apiKeyPermissionLoad]).then(function (result) {
         return {
             user: result[0],
-            app: result[1]
+            apiKey: result[1]
         };
     });
 

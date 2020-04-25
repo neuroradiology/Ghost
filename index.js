@@ -3,6 +3,7 @@
 
 var startTime = Date.now(),
     debug = require('ghost-ignition').debug('boot:index'),
+    sentry = require('./core/server/sentry'),
     ghost, express, common, urlService, parentApp;
 
 debug('First requires...');
@@ -13,8 +14,10 @@ debug('Required ghost');
 
 express = require('express');
 common = require('./core/server/lib/common');
-urlService = require('./core/server/services/url');
+urlService = require('./core/frontend/services/url');
 parentApp = express();
+
+parentApp.use(sentry.requestHandler);
 
 debug('Initialising Ghost');
 ghost().then(function (ghostServer) {

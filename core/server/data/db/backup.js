@@ -5,16 +5,31 @@ var fs = require('fs-extra'),
     Promise = require('bluebird'),
     config = require('../../config'),
     common = require('../../lib/common'),
-    urlService = require('../../services/url'),
+    urlUtils = require('../../lib/url-utils'),
     exporter = require('../exporter'),
 
     writeExportFile,
     backup;
 
 writeExportFile = function writeExportFile(exportResult) {
-    var filename = path.resolve(urlService.utils.urlJoin(config.get('paths').contentPath, 'data', exportResult.filename));
+    var filename = path.resolve(urlUtils.urlJoin(config.get('paths').contentPath, 'data', exportResult.filename));
 
     return fs.writeFile(filename, JSON.stringify(exportResult.data)).return(filename);
+};
+
+const readBackup = async (filename) => {
+    const parsedFileName = path.parse(filename);
+    const sanitized = `${parsedFileName.name}${parsedFileName.ext}`;
+    const backupPath = path.resolve(urlUtils.urlJoin(config.get('paths').contentPath, 'data', sanitized));
+
+    const exists = await fs.pathExists(backupPath);
+
+    if (exists) {
+        const backup = await fs.readFile(backupPath);
+        return JSON.parse(backup);
+    } else {
+        return null;
+    }
 };
 
 /**
@@ -39,4 +54,7 @@ backup = function backup(options) {
         });
 };
 
-module.exports = backup;
+module.exports = {
+    backup,
+    readBackup
+};
